@@ -108,6 +108,9 @@ html, body {
 .parents { margin-top: 24px; border-top: 1px solid #e3eee0; padding-top: 16px; }
 .parents h2 { margin: 0 0 10px; font-size: 24px; font-weight: 800; color: #ea853a; }
 .parents p { margin: 0 0 10px; font-size: 18px; line-height: 1.5; color: #3c4a38; }
+.credits { margin-top: 20px; border-top: 1px solid #e3eee0; padding-top: 14px; }
+.credits p { margin: 0 0 6px; font-size: 17px; color: #3c4a38; }
+.credits a { color: #318420; font-weight: 700; }
 .field { display: flex; gap: 12px; margin-bottom: 22px; }
 .field input {
   flex: 1;

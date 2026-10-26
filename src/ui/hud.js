@@ -98,6 +98,10 @@ export class Hud {
           <p>Ребёнок строит свой город: ставит маяки, сирены и датчики и ищет спрятанные золотые кубики с буквами русского алфавита. Каждая найденная буква приносит очки.</p>
           <p>В игре нет боя, чата и чужих игроков. Животные не получают урона. Вход защищён паролем, и играть можно без регистрации.</p>
         </section>
+        <section class="credits">
+          <p>Разработчик: <strong>Максим Ланиес</strong></p>
+          <p>По вопросам доработок и идей пишите в <a href="https://t.me/ilanies" target="_blank" rel="noopener">Telegram t.me/ilanies</a> или в <a href="https://max.ru/u/f9LHodD0cOIbCxeh8UeKTgIyMK4OG8Hr_u-b4Sakn4oJBrUrIjOt4M6u-mg" target="_blank" rel="noopener">MAX</a></p>
+        </section>
       </div>`
     root.appendChild(this.overlay)
 
@@ -164,13 +168,13 @@ export class Hud {
 
   setStatus(state) {
     const labels = {
-      idle: 'idle',
-      connecting: 'connecting to the server…',
-      connected: 'connected — pick a name and join',
-      reconnecting: 'connection lost, retrying…',
-      closed: 'disconnected',
+      idle: 'ожидание',
+      connecting: 'подключение к серверу…',
+      connected: 'подключено — введи имя и нажми «Играть»',
+      reconnecting: 'связь прервалась, пробуем снова…',
+      closed: 'отключено',
     }
-    this.overlayStatus.innerHTML = `<span style="color:#8b98a8">${labels[state] || state}</span>`
+    this.overlayStatus.innerHTML = `<span style="color:#5b6b57">${labels[state] || state}</span>`
   }
 
   showOverlay(show) {
