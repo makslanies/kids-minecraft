@@ -6,6 +6,9 @@ import { B } from './blocks.js'
 /** Points for each letter cube the player breaks. */
 export const LETTER_REWARD = 10
 
+/** Colours a letter can have. Bright enough to read on grass and sky. */
+export const LETTER_COLORS = ['#ff5c5c', '#ff9f43', '#ffe14d', '#7ee787', '#4dd0ff', '#8b7bff', '#ff7ad9', '#ffffff']
+
 /** The whole Russian alphabet, in order. */
 export const LETTERS = [
   'А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ё', 'Ж', 'З', 'И', 'Й', 'К', 'Л', 'М', 'Н', 'О', 'П',

@@ -18,7 +18,7 @@ import { S2C, C2S, ERRORS } from '../shared/protocol.js'
 import { MISSIONS } from '../shared/missions.js'
 import { INPUT_HZ } from '../shared/constants.js'
 import { B, BLOCKS } from '../shared/blocks.js'
-import { HOTBAR, TOOL_BY_ID, toolSpeedOn, isTool, breakDelay } from '../shared/items.js'
+import { PLACE_BLOCK, TOOL_BY_ID, TOOL_PICKAXE, toolSpeedOn, isTool, breakDelay } from '../shared/items.js'
 
 const app = document.getElementById('app')
 const hud = new Hud(document.body)
@@ -31,7 +31,7 @@ const dom = worldRenderer.renderer.domElement
 const controller = new PlayerController(worldRenderer.camera, dom)
 // what you are holding, drawn in view space
 const handView = new HandView(worldRenderer.camera, worldRenderer.atlas)
-hud.onSelect = (item) => handView.setItem(item)
+handView.setItem({ kind: 'tool', id: TOOL_PICKAXE })
 
 // Tablets get on-screen controls and no mouse: no pointer lock, no right-click.
 const isTouch = isTouchDevice()
@@ -155,13 +155,11 @@ function onInit(msg) {
   }
   if (msg.mobs) mobView.applySnapshot(msg.mobs)
 
-  hud.attachAtlas(worldRenderer.atlas.image)
   hud.offerMission(msg.city?.mission)
   letterSign.sync(msg.city?.cube)
   hud.setScores(msg.scores, selfId)
-  handView.setItem(HOTBAR[hud.selected])
   hud.showOverlay(false)
-  hud.setHint(isTouch ? 'Проведи пальцем по экрану, чтобы смотреть' : 'Нажми на экран, чтобы смотреть по сторонам')
+  hud.setHint(isTouch ? 'Круг справа внизу — чтобы смотреть по сторонам' : 'Нажми на экран, чтобы смотреть по сторонам')
   hud.toast(`Ты в игре, ${msg.name}!`, 'info')
 
   joined = true
@@ -238,8 +236,11 @@ function checkCity() {
   connection.send(C2S.CHECK, {})
 }
 
+// A mouse still locks the view even when the on-screen controls are showing.
+const hasMouse = matchMedia('(pointer: fine)').matches
+
 dom.addEventListener('mousedown', (e) => {
-  if (!joined || isTouch) return
+  if (!joined || (isTouch && !hasMouse)) return
   if (!controller.locked) {
     controller.requestLock()
     return
@@ -248,21 +249,12 @@ dom.addEventListener('mousedown', (e) => {
   if (e.button === 2) placeBlock()
 })
 
-dom.addEventListener('wheel', (e) => {
-  if (!joined) return
-  hud.cycle(e.deltaY > 0 ? 1 : -1)
-}, { passive: true })
-
 window.addEventListener('keydown', (e) => {
   if (!joined) return
   if (e.code === 'Escape') return
   if (e.code === 'KeyC') {
     checkCity()
     return
-  }
-  const n = Number(e.key)
-  if (Number.isInteger(n) && n >= 1 && n <= HOTBAR.length) {
-    hud.select(n - 1)
   }
 })
 
@@ -377,17 +369,15 @@ window.__voxel = {
   getTriangles: () => worldRenderer.triangles || worldRenderer.countTriangles(),
   /** Drive an edit from the console / automation. */
   edit: (x, y, z, block) => reconciler.requestEdit(x, y, z, block),
-  selectSlot: (i) => { hud.select(i); return { ...HOTBAR[hud.selected], tool: hud.selectedTool, block: hud.selectedBlock } },
-  getSelected: () => ({ ...HOTBAR[hud.selected], tool: hud.selectedTool, block: hud.selectedBlock }),
+  getSelected: () => ({ tool: hud.selectedTool, block: hud.selectedBlock }),
   setLook: (yaw, pitch) => { controller.yaw = yaw; controller.pitch = pitch },
   getLook: () => ({ yaw: controller.yaw, pitch: controller.pitch }),
   teleport: (x, y, z) => controller.setPosition(x, y, z),
   getPosition: () => ({ x: controller.pos.x, y: controller.pos.y, z: controller.pos.z }),
-  hotbar: HOTBAR,
 }
 
 hud.setStatus('idle')
-// the block swatches in the hotbar read pixels from the atlas, so wait for it
+// the blocks are drawn from the atlas, so wait for it before the first frame
 worldRenderer.atlas.ready.then(() => {
   connection.connect()
   tick()

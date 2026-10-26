@@ -7,6 +7,9 @@
 
 import { B } from './blocks.js'
 
+/** The block that 'Поставить' places; there is no block picker any more. */
+export const PLACE_BLOCK = B.BRICK
+
 export const TOOL_HAND = 0
 export const TOOL_PICKAXE = 1
 export const TOOL_AXE = 2
@@ -84,10 +87,8 @@ export function isTool(itemId) {
  * id never collides with a block id (blocks are 1..14, tools are 1..3, so the
  * hotbar carries an explicit `kind` instead).
  */
+/** The shovel is always in hand; the bar only offers blocks. */
 export const HOTBAR = [
-  { kind: 'tool', id: TOOL_PICKAXE },
-  { kind: 'tool', id: TOOL_AXE },
-  { kind: 'tool', id: TOOL_SHOVEL },
   { kind: 'block', id: B.GRASS },
   { kind: 'block', id: B.DIRT },
   { kind: 'block', id: B.STONE },

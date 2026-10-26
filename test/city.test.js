@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { B, isSolid } from '../shared/blocks.js'
 import { DISTRICT_BY_ID } from '../shared/districts.js'
 import { simulate, countByType } from '../shared/alert.js'
-import { MISSIONS, LETTERS, LETTER_REWARD, isMet, currentMission } from '../shared/missions.js'
+import { MISSIONS, LETTERS, LETTER_REWARD, LETTER_COLORS, isMet, currentMission } from '../shared/missions.js'
 import { AuthoritativeWorld } from '../server/world.js'
 import { CityState } from '../server/city.js'
 import { startTestServer, TestClient, sleep, C2S, S2C, EDIT_GAP_MS } from './harness.js'
@@ -104,6 +104,7 @@ test('ensureCube puts one golden letter cube above the ground near the plaza', (
   assert.equal(world.get(x, y, z), B.LETTER)
   assert.ok(isSolid(world.get(x, y - 1, z)), 'the cube sits on something solid')
   assert.ok(Math.abs(x - 32) <= 20 && Math.abs(z - 32) <= 20, 'close to the plaza')
+  assert.ok(LETTER_COLORS.includes(city.cube.color), 'the letter gets one of the colours')
   assert.deepEqual(city.ensureCube(), [], 'a second call does not add another cube')
 })
 
@@ -141,10 +142,12 @@ test('after the last letter no cube is left and no mission is offered', () => {
 
 test('startup repairs a cube that the save lost', () => {
   const { world, city } = cityWithWorld()
-  city.restoreLetters({ cube: { x: 5, y: 40, z: 5, letter: 'Б' } })
+  world.set(5, 40, 5, B.LETTER)
+  city.restoreLetters({ cube: { x: 5, y: 40, z: 5, letter: 'Б', color: '#4dd0ff' } })
   city.restore(['letter-А'])
   city.ensureCube()
   assert.equal(city.cube.letter, 'Б')
+  assert.equal(city.cube.color, '#4dd0ff', 'the saved colour survives a restart')
   assert.equal(world.get(city.cube.x, city.cube.y, city.cube.z), B.LETTER)
 })
 

@@ -10,6 +10,8 @@ import { toolReach } from '../../shared/items.js'
 
 const HW = PLAYER_HALF_WIDTH
 const H = PLAYER_HEIGHT
+/** pixels per second the view turns while the touch pad is pushed fully */
+const LOOK_RATE = 600
 
 /** Amanatides & Woo voxel traversal.
  * @returns {{x,y,z,nx,ny,nz,id,dist}|null}
@@ -78,8 +80,10 @@ export class PlayerController {
     this.onGround = false
     this.locked = false
     this.keys = new Set()
-    /** on-screen stick (touch): x right, y forward, each -1..1 */
+    /** on-screen arrows (touch): x right, y forward, each -1..1 */
     this.touchMove = { x: 0, y: 0 }
+    /** on-screen round pad (touch): x right, y down, each -1..1 */
+    this.touchLook = { x: 0, y: 0 }
     this.touchJump = false
     this.sprinting = false
     this.dead = false
@@ -146,6 +150,9 @@ export class PlayerController {
   }
 
   update(dt, world) {
+    if (this.touchLook.x || this.touchLook.y) {
+      this.look(this.touchLook.x * LOOK_RATE * dt, this.touchLook.y * LOOK_RATE * dt)
+    }
     const water = this.inWater(world)
     this.sprinting = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
     const speed = this.sprinting ? SPRINT_SPEED : WALK_SPEED

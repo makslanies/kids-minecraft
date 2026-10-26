@@ -1,7 +1,6 @@
 // All DOM UI. Plain elements + CSS, no framework.
 
-import { BLOCKS, ATLAS_COLS, tileFor } from '../../shared/blocks.js'
-import { HOTBAR, TOOL_BY_ID, toolSpeedOn, FAMILY } from '../../shared/items.js'
+import { TOOL_PICKAXE, PLACE_BLOCK } from '../../shared/items.js'
 
 const el = (tag, className, html) => {
   const node = document.createElement(tag)
@@ -10,100 +9,9 @@ const el = (tag, className, html) => {
   return node
 }
 
-/**
- * Tool icons, drawn to fill a 64x64 canvas so they read at 32px in the hotbar
- * instead of turning into hairlines.
- */
-const STEEL = '#d7dde6'
-const STEEL_DARK = '#9aa3b0'
-const WOOD = '#a87c4e'
-const WOOD_DARK = '#7a5732'
-
-const TOOL_ICONS = {
-  pickaxe: (ctx) => {
-    ctx.strokeStyle = WOOD
-    ctx.lineWidth = 7
-    ctx.beginPath()
-    ctx.moveTo(12, 52)
-    ctx.lineTo(38, 24)
-    ctx.stroke()
-    ctx.strokeStyle = STEEL
-    ctx.lineWidth = 8
-    ctx.beginPath()
-    ctx.moveTo(20, 12)
-    ctx.quadraticCurveTo(44, 10, 54, 30)
-    ctx.stroke()
-    ctx.strokeStyle = STEEL_DARK
-    ctx.lineWidth = 2.5
-    ctx.beginPath()
-    ctx.moveTo(26, 13)
-    ctx.quadraticCurveTo(44, 13, 51, 27)
-    ctx.stroke()
-    ctx.fillStyle = WOOD_DARK
-    ctx.beginPath()
-    ctx.arc(11, 53, 5, 0, Math.PI * 2)
-    ctx.fill()
-  },
-  axe: (ctx) => {
-    ctx.strokeStyle = WOOD
-    ctx.lineWidth = 7
-    ctx.beginPath()
-    ctx.moveTo(18, 54)
-    ctx.lineTo(30, 26)
-    ctx.stroke()
-    ctx.fillStyle = STEEL
-    ctx.beginPath()
-    ctx.moveTo(26, 6)
-    ctx.lineTo(54, 14)
-    ctx.lineTo(48, 34)
-    ctx.closePath()
-    ctx.fill()
-    ctx.strokeStyle = STEEL_DARK
-    ctx.lineWidth = 2.5
-    ctx.beginPath()
-    ctx.moveTo(30, 9)
-    ctx.lineTo(50, 15)
-    ctx.stroke()
-  },
-  shovel: (ctx) => {
-    ctx.strokeStyle = WOOD
-    ctx.lineWidth = 7
-    ctx.beginPath()
-    ctx.moveTo(32, 22)
-    ctx.lineTo(32, 54)
-    ctx.stroke()
-    ctx.fillStyle = STEEL
-    ctx.beginPath()
-    ctx.moveTo(18, 4)
-    ctx.lineTo(46, 4)
-    ctx.lineTo(38, 24)
-    ctx.lineTo(26, 24)
-    ctx.closePath()
-    ctx.fill()
-    ctx.strokeStyle = STEEL_DARK
-    ctx.lineWidth = 2.5
-    ctx.beginPath()
-    ctx.moveTo(22, 8)
-    ctx.lineTo(42, 8)
-    ctx.stroke()
-  },
-}
-
-function toolIcon(name) {
-  const canvas = document.createElement('canvas')
-  canvas.width = 64
-  canvas.height = 64
-  const ctx = canvas.getContext('2d')
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  TOOL_ICONS[name]?.(ctx)
-  return canvas
-}
-
 export class Hud {
   constructor(root) {
     this.root = root
-    this.selected = 0
     this.toastTimer = null
 
     const ui = el('div')
@@ -114,27 +22,6 @@ export class Hud {
     this.crosshair = el('div')
     this.crosshair.id = 'crosshair'
     ui.appendChild(this.crosshair)
-
-    // --- hotbar ------------------------------------------------------------
-    this.hotbar = el('div')
-    this.hotbar.id = 'hotbar'
-    ui.appendChild(this.hotbar)
-    this.slots = HOTBAR.map((item, i) => {
-      const slot = el('div', `slot ${item.kind === 'tool' ? 'tool' : ''}`)
-      slot.appendChild(el('span', 'num', String(i + 1)))
-      if (item.kind === 'tool') {
-        const icon = toolIcon(TOOL_BY_ID.get(item.id).key)
-        slot.appendChild(icon)
-      } else {
-        slot.appendChild(el('canvas'))
-      }
-      slot.appendChild(el('span', 'name', item.kind === 'tool'
-        ? TOOL_BY_ID.get(item.id).name
-        : BLOCKS[item.id].name))
-      slot.addEventListener('click', () => this.select(i))
-      this.hotbar.appendChild(slot)
-      return slot
-    })
 
     // --- break swing feedback ----------------------------------------------
     this.swingBar = el('div')
@@ -199,14 +86,13 @@ export class Hud {
             <tr><td><kbd>Shift</kbd></td><td>Бежать</td></tr>
             <tr><td>Левая кнопка</td><td>Сломать блок</td></tr>
             <tr><td>Правая кнопка</td><td>Поставить блок</td></tr>
-            <tr><td><kbd>1</kbd>&ndash;<kbd>8</kbd> / wheel</td><td>Выбрать инструмент или блок</td></tr>
             <tr><td><kbd>C</kbd></td><td>Проверить город</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Выйти из игры</td></tr>
           </table>
         </div>
         <div class="keys touch-help">
-          <p>Слева пальцем — ходить. Справа — сломать, поставить и прыгнуть.</p>
-          <p>Чтобы посмотреть по сторонам, проведи пальцем по экрану. Проверка города — кнопка ✔.</p>
+          <p>Стрелки слева внизу — ходить. Круг справа внизу — смотреть по сторонам.</p>
+          <p>Посередине — сломать, поставить и прыгнуть. Проверка города — кнопка вверху слева.</p>
         </div>
       </div>`
     root.appendChild(this.overlay)
@@ -215,63 +101,16 @@ export class Hud {
     this.joinBtn = this.overlay.querySelector('#join-btn')
     this.overlayStatus = this.overlay.querySelector('#overlay-status')
 
-    this.onSelect = null
-    this.select(0)
   }
 
-  /** 32x32 block swatch cropped straight out of the runtime atlas. */
-  swatch(id, atlasImage) {
-    const canvas = document.createElement('canvas')
-    canvas.width = 32
-    canvas.height = 32
-    const ctx = canvas.getContext('2d')
-    ctx.imageSmoothingEnabled = false
-    if (atlasImage) {
-      const tile = tileFor(id, 'side')
-      const col = tile % ATLAS_COLS
-      const row = Math.floor(tile / ATLAS_COLS)
-      ctx.drawImage(atlasImage, col * 16, row * 16, 16, 16, 0, 0, 32, 32)
-    } else {
-      ctx.fillStyle = '#3d444d'
-      ctx.fillRect(0, 0, 32, 32)
-    }
-    return canvas
-  }
-
-  /** Re-draw the block swatches once the atlas exists. */
-  attachAtlas(atlasImage) {
-    this.slots.forEach((slot, i) => {
-      const item = HOTBAR[i]
-      if (item.kind !== 'block') return
-      const old = slot.querySelector('canvas')
-      if (old) slot.replaceChild(this.swatch(item.id, atlasImage), old)
-    })
-  }
-
-  select(index) {
-    this.selected = ((index % HOTBAR.length) + HOTBAR.length) % HOTBAR.length
-    this.slots.forEach((s, i) => s.classList.toggle('active', i === this.selected))
-    const item = HOTBAR[this.selected]
-    this.onSelect?.(item)
-    return item
-  }
-
-  get selectedItem() {
-    return HOTBAR[this.selected]
-  }
-
+  /** The tool that breaks blocks. Only the pickaxe is in hand now. */
   get selectedTool() {
-    const item = HOTBAR[this.selected]
-    return item.kind === 'tool' ? item.id : 0
+    return TOOL_PICKAXE
   }
 
+  /** Placing always uses the same block; there is no block picker. */
   get selectedBlock() {
-    const item = HOTBAR[this.selected]
-    return item.kind === 'block' ? item.id : 0
-  }
-
-  cycle(delta) {
-    return this.select(this.selected + delta)
+    return PLACE_BLOCK
   }
 
   setHint(text) {

@@ -3,7 +3,7 @@
 
 import * as THREE from 'three'
 
-function letterMaterial(letter) {
+function letterMaterial(letter, color) {
   const canvas = document.createElement('canvas')
   canvas.width = 128
   canvas.height = 128
@@ -14,7 +14,7 @@ function letterMaterial(letter) {
   ctx.lineWidth = 14
   ctx.strokeStyle = '#2b1d00'
   ctx.strokeText(letter, 64, 70)
-  ctx.fillStyle = '#ffd23f'
+  ctx.fillStyle = color
   ctx.fillText(letter, 64, 70)
   const map = new THREE.CanvasTexture(canvas)
   // drawn through hills and trees: the letter is a signpost, not scenery
@@ -28,9 +28,9 @@ export class LetterSign {
     this.key = null
   }
 
-  /** @param {{x:number,y:number,z:number,letter:string}|null} cube */
+  /** @param {{x:number,y:number,z:number,letter:string,color:string}|null} cube */
   sync(cube) {
-    const key = cube ? `${cube.x},${cube.y},${cube.z},${cube.letter}` : null
+    const key = cube ? `${cube.x},${cube.y},${cube.z},${cube.letter},${cube.color}` : null
     if (key === this.key) return
     this.key = key
     if (this.sprite) {
@@ -40,7 +40,7 @@ export class LetterSign {
       this.sprite = null
     }
     if (!cube) return
-    this.sprite = new THREE.Sprite(letterMaterial(cube.letter))
+    this.sprite = new THREE.Sprite(letterMaterial(cube.letter, cube.color))
     this.sprite.renderOrder = 10
     this.sprite.position.set(cube.x + 0.5, cube.y + 1.6, cube.z + 0.5)
     this.sprite.scale.set(2.4, 2.4, 1)

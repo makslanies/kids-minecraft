@@ -5,7 +5,7 @@
 import { WORLD_X, WORLD_Y, WORLD_Z, PLAZA, WATER_LEVEL } from '../shared/constants.js'
 import { B, isSolid } from '../shared/blocks.js'
 import { DISTRICTS } from '../shared/districts.js'
-import { MISSIONS, LETTER_REWARD, isMet, currentMission } from '../shared/missions.js'
+import { MISSIONS, LETTER_REWARD, LETTER_COLORS, isMet, currentMission } from '../shared/missions.js'
 import { simulate, countByType } from '../shared/alert.js'
 
 const DEVICE_BLOCKS = new Set([B.BEACON, B.SIREN, B.SENSOR, B.DISPATCH])
@@ -17,7 +17,7 @@ export class CityState {
     this.world = world
     /** ids of missions already completed, in the order they were completed */
     this.completed = []
-    /** the letter cube in the world right now: {x,y,z,letter} or null */
+    /** the letter cube in the world right now: {x,y,z,letter,color} or null */
     this.cube = null
   }
 
@@ -32,7 +32,7 @@ export class CityState {
 
   restoreLetters({ cube } = {}) {
     this.cube = cube && Number.isInteger(cube.x) && Number.isInteger(cube.y) && Number.isInteger(cube.z)
-      ? { x: cube.x, y: cube.y, z: cube.z, letter: String(cube.letter) }
+      ? { x: cube.x, y: cube.y, z: cube.z, letter: String(cube.letter), color: String(cube.color || LETTER_COLORS[0]) }
       : null
   }
 
@@ -65,7 +65,8 @@ export class CityState {
     const spot = this.findSpot()
     if (!spot) return changes
     this.world.set(spot.x, spot.y, spot.z, B.LETTER)
-    this.cube = { ...spot, letter: want }
+    const color = LETTER_COLORS[Math.floor(Math.random() * LETTER_COLORS.length)]
+    this.cube = { ...spot, letter: want, color }
     changes.push({ x: spot.x, y: spot.y, z: spot.z, block: B.LETTER })
     return changes
   }

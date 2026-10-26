@@ -98,9 +98,9 @@ test('reach follows the tool, and an empty hand has the default reach', () => {
   assert.ok(toolReach(TOOL_BY_KEY.get('pickaxe').id) > toolReach(0))
 })
 
-test('the hotbar carries three tools then twelve blocks, all placeable', () => {
-  assert.equal(HOTBAR.length, 15)
-  assert.equal(HOTBAR.filter((i) => i.kind === 'tool').length, 3)
+test('the hotbar carries only blocks, all placeable; the shovel is not on the bar', () => {
+  assert.equal(HOTBAR.length, 12)
+  assert.equal(HOTBAR.filter((i) => i.kind === 'tool').length, 0)
   for (const item of HOTBAR) {
     if (item.kind === 'block') assert.equal(BLOCKS[item.id].placeable, true)
     else assert.ok(isTool(item.id))

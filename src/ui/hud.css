@@ -50,38 +50,6 @@ html, body {
 #score .me { font-weight: 700; }
 #score .pts { margin-left: auto; padding-left: 16px; font-size: 22px; font-weight: 700; color: #ffd23f; }
 
-#hotbar {
-  position: absolute;
-  left: 50%;
-  bottom: 18px;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  padding: 10px;
-  background: rgba(13, 17, 23, 0.66);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 12px;
-}
-.slot {
-  position: relative;
-  width: var(--slot, 76px);
-  height: var(--slot, 76px);
-  border-radius: 12px;
-  border: 3px solid transparent;
-  background: rgba(255, 255, 255, 0.05);
-  display: grid;
-  place-items: center;
-}
-.slot.active { border-color: #58a6ff; background: rgba(88, 166, 255, 0.14); }
-.slot canvas { width: calc(var(--slot, 76px) * 0.76); height: calc(var(--slot, 76px) * 0.76); image-rendering: pixelated; border-radius: 3px; }
-.slot.tool { background: rgba(255, 255, 255, 0.09); }
-.slot.tool canvas { image-rendering: auto; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55)); }
-.slot .num { position: absolute; top: 2px; left: 6px; font-size: 14px; font-weight: 700; color: #c9d1d9; }
-.slot .name {
-  position: absolute; bottom: -26px; left: 50%; transform: translateX(-50%);
-  font-size: 14px; color: #e6edf3; white-space: nowrap;
-}
-
 /* ------------------------------------------------------------ break swing */
 #swing {
   position: absolute;
@@ -223,10 +191,41 @@ kbd {
 }
 
 /* ------------------------------------------- touch controls (tablets only) */
-#stick {
+/* Bottom row: arrows on the left, action buttons in the middle, view pad on the right. */
+#dpad {
   position: absolute;
   left: 16px;
-  bottom: 16px;
+  bottom: 60px;
+  width: 210px;
+  height: 210px;
+  pointer-events: auto;
+}
+.dir {
+  position: absolute;
+  width: 70px;
+  height: 70px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 28px;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+.dir.pressed { background: rgba(88, 166, 255, 0.4); border-color: #58a6ff; }
+.dir.up { left: 70px; top: 0; }
+.dir.left { left: 0; top: 70px; }
+.dir.right { left: 140px; top: 70px; }
+.dir.down { left: 70px; top: 140px; }
+
+#lookpad {
+  position: absolute;
+  right: 16px;
+  bottom: 60px;
   width: 170px;
   height: 170px;
   border-radius: 50%;
@@ -237,29 +236,39 @@ kbd {
   user-select: none;
   -webkit-user-select: none;
 }
-#stick .knob {
+#lookpad .knob {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 78px;
-  height: 78px;
-  margin: -39px 0 0 -39px;
+  width: 74px;
+  height: 74px;
+  margin: -37px 0 0 -37px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.38);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
+/* break and jump: a tall column just left of the view pad */
 #actions {
   position: absolute;
-  right: 16px;
-  bottom: 16px;
+  right: 236px;
+  bottom: 60px;
   display: flex;
+  flex-direction: column;
   gap: 14px;
   pointer-events: auto;
 }
+#actions .act {
+  width: 116px;
+  height: 116px;
+}
+/* the place button is hidden for now; remove this rule to show it again */
+#act-place {
+  display: none;
+}
 .act {
-  width: 118px;
-  height: 118px;
+  width: 92px;
+  height: 92px;
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.25);
   color: #fff;
@@ -274,8 +283,8 @@ kbd {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
-.act .icon { font-size: 40px; line-height: 1; }
-.act .label { font-size: 17px; font-weight: 700; }
+.act .icon { font-size: 34px; line-height: 1; }
+.act .label { font-size: 15px; font-weight: 700; }
 .act.pressed { transform: scale(0.94); filter: brightness(1.2); }
 .act.break { background: #d9463f; }
 .act.place { background: #1f6feb; }
@@ -283,7 +292,7 @@ kbd {
 #act-check {
   position: absolute;
   top: 14px;
-  right: 14px;
+  left: 14px;
   width: auto;
   height: auto;
   border-radius: 16px;
@@ -301,23 +310,25 @@ body.touch .touch-help { display: block; }
 body.touch .keys:not(.touch-help) { display: none; }
 body.touch .touch-help p { font-size: 20px; margin: 0 0 8px; color: #b6c0cc; }
 
-/* On a tablet the hotbar floats above the stick and the buttons. */
-body.touch {
-  --slot-size: min(70px, 5.6vw);
+/* On a tablet the mission card drops in from the top, so it never covers the controls. */
+body.touch #sheet {
+  top: 150px;
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  width: min(640px, 92vw);
+  max-height: none;
+  border-radius: 24px;
+  border-top: 2px solid rgba(88, 166, 255, 0.5);
+  transform: translate(-50%, -160%);
 }
-body.touch #hotbar {
-  bottom: 222px;
-  gap: 4px;
-  padding: 8px;
-  --slot: var(--slot-size);
-}
-/* names would run off the edge on a tablet; the icons carry the meaning */
-body.touch .slot .name { display: none; }
-body.touch .slot { box-sizing: border-box; }
+body.touch #sheet.open { transform: translate(-50%, 0); }
+body.touch #sheet .grip { display: none; }
+
+/* Without the block bar, the hints sit just above the bottom row of controls. */
 body.touch #score { top: 14px; right: 14px; }
-body.touch #act-check { top: auto; bottom: 150px; right: 16px; }
-body.touch body.touch #hint,
-body.touch #toast { bottom: 318px; }
+body.touch #hint,
+body.touch #toast { bottom: 250px; }
 
 #toast {
   position: absolute;
