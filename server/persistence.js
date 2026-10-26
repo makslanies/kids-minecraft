@@ -11,8 +11,9 @@ const FILE = 'world.json'
 const TMP = 'world.json.tmp'
 
 export class Persistence {
-  constructor({ world, dataDir, intervalMs = SAVE_INTERVAL_MS, log = console.log }) {
+  constructor({ world, city, dataDir, intervalMs = SAVE_INTERVAL_MS, log = console.log }) {
     this.world = world
+    this.city = city
     this.dataDir = dataDir
     this.file = path.join(dataDir, FILE)
     this.tmp = path.join(dataDir, TMP)
@@ -37,6 +38,8 @@ export class Persistence {
       return { loaded: 0, error: 'shape' }
     }
     const loaded = this.world.applyOverlay(parsed.edits)
+    if (this.city && Array.isArray(parsed.completed)) this.city.restore(parsed.completed)
+    if (this.city && parsed.letters) this.city.restoreLetters(parsed.letters)
     if (typeof parsed.seed === 'number' && parsed.seed >>> 0 !== this.world.seed) {
       this.log(`[persist] snapshot seed ${parsed.seed} != runtime seed ${this.world.seed}; edits re-applied on the new terrain`)
     }
@@ -51,6 +54,8 @@ export class Persistence {
       seed: this.world.seed,
       savedAt: Date.now(),
       edits: this.world.editList(),
+      completed: this.city ? this.city.completed : [],
+      letters: this.city ? this.city.persistState() : null,
     }
     try {
       fs.mkdirSync(this.dataDir, { recursive: true })

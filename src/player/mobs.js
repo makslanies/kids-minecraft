@@ -79,31 +79,6 @@ function buildChicken(def) {
 
 const BUILDERS = { [MOB_PIG]: buildPig, [MOB_GOAT]: buildGoat, [MOB_CHICKEN]: buildChicken }
 
-function makeHealthBar() {
-  const canvas = document.createElement('canvas')
-  canvas.width = 64
-  canvas.height = 8
-  const tex = new THREE.CanvasTexture(canvas)
-  tex.colorSpace = THREE.SRGBColorSpace
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: tex, depthTest: false, transparent: true,
-  }))
-  sprite.scale.set(0.7, 0.09, 1)
-  sprite.renderOrder = 9
-  return { canvas, ctx: canvas.getContext('2d'), tex, sprite }
-}
-
-function drawHealthBar(bar, hp, maxHp) {
-  const { ctx, canvas, tex } = bar
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = 'rgba(8,10,14,0.75)'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  const pct = Math.max(0, Math.min(1, hp / maxHp))
-  ctx.fillStyle = pct > 0.5 ? '#7ee787' : pct > 0.25 ? '#e3b341' : '#f85149'
-  ctx.fillRect(1, 1, (canvas.width - 2) * pct, canvas.height - 2)
-  tex.needsUpdate = true
-}
-
 export class MobView {
   constructor(scene) {
     this.scene = scene
@@ -120,12 +95,8 @@ export class MobView {
     if (!def) return null
     const { group, legs } = BUILDERS[data.kind](def)
     group.position.set(data.x, data.y, data.z)
-    const bar = makeHealthBar()
-    bar.sprite.position.y = def.height + 0.45
-    bar.sprite.visible = false
-    group.add(bar.sprite)
     this.scene.add(group)
-    const mob = { id: data.id, kind: data.kind, def, group, legs, bar, phase: 0, lastHp: data.hp, x: data.x, z: data.z, flash: 0 }
+    const mob = { id: data.id, kind: data.kind, group, legs, phase: 0, x: data.x, z: data.z }
     this.mobs.set(data.id, mob)
     return mob
   }
@@ -140,8 +111,6 @@ export class MobView {
         o.material.dispose()
       }
     })
-    m.bar.tex.dispose()
-    m.bar.sprite.material.dispose()
     this.mobs.delete(id)
   }
 
@@ -149,16 +118,10 @@ export class MobView {
     for (const id of [...this.mobs.keys()]) this.remove(id)
   }
 
-  /** Mobs the client has never seen before, for the attacker picker. */
   list() {
     return [...this.mobs.values()].map((m) => ({
-      id: m.id, kind: m.kind, x: m.x, y: m.group.position.y, z: m.z, hp: m.lastHp,
+      id: m.id, kind: m.kind, x: m.x, y: m.group.position.y, z: m.z,
     }))
-  }
-
-  flash(id) {
-    const m = this.mobs.get(id)
-    if (m) m.flash = 0.22
   }
 
   applySnapshot(list, now) {
@@ -170,17 +133,12 @@ export class MobView {
       m.group.position.set(d.x, d.y, d.z)
       // the server's yaw is atan2(dirX, dirZ); models face -Z like the players
       m.group.rotation.y = d.yaw + Math.PI
-      if (d.hp !== m.lastHp) {
-        m.lastHp = d.hp
-        m.bar.sprite.visible = d.hp < m.def.hp
-        drawHealthBar(m.bar, d.hp, m.def.hp)
-      }
       m.y = d.y
       m.moving = d.moving
     }
   }
 
-  update(dt) {
+  update() {
     for (const m of this.mobs.values()) {
       const prevY = m.group.position.y
       const moved = Math.hypot(m.group.position.x - (m.px ?? m.group.position.x), m.group.position.z - (m.pz ?? m.group.position.z))
@@ -193,17 +151,6 @@ export class MobView {
       })
       // idle bob so a standing animal is not a statue
       m.group.position.y = prevY + (m.moving ? Math.abs(Math.sin(m.phase)) * 0.02 : 0)
-
-      if (m.flash > 0) {
-        m.flash = Math.max(0, m.flash - dt)
-        const on = m.flash > 0
-        m.group.traverse((o) => {
-          if (o.isMesh && o.material.color) {
-            if (!o.userData.base) o.userData.base = o.material.color.clone()
-            o.material.color.copy(on ? o.userData.base.clone().lerp(new THREE.Color('#ff5a4a'), 0.6) : o.userData.base)
-          }
-        })
-      }
     }
   }
 }

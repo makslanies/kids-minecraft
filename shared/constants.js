@@ -67,13 +67,6 @@ export const PLAYER_COLORS = [
   '#a55ce0', '#5cd0b8', '#e07fb0', '#c8c85c',
 ]
 
-// -------------------------------------------------------------------- combat
-export const PLAYER_MAX_HP = 20
-export const PLAYER_REGEN_DELAY_MS = 6_000
-export const PLAYER_REGEN_PERIOD = 3_000
-export const PLAYER_REGEN_AMOUNT = 1
-export const RESPAWN_MS = 3_000
-
 // ---------------------------------------------------------------- persistence
 export const SAVE_INTERVAL_MS = 10_000
 export const SNAPSHOT_VERSION = 1

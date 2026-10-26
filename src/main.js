@@ -11,12 +11,14 @@ import { PlayerController } from './player/controls.js'
 import { RemotePlayers } from './player/remote.js'
 import { MobView } from './player/mobs.js'
 import { HandView } from './player/hand.js'
+import { LetterSign } from './world/letters.js'
 import { Hud } from './ui/hud.js'
+import { TouchControls, isTouchDevice } from './ui/touch.js'
 import { S2C, C2S, ERRORS } from '../shared/protocol.js'
-import { INPUT_HZ, PLAYER_MAX_HP } from '../shared/constants.js'
+import { MISSIONS } from '../shared/missions.js'
+import { INPUT_HZ } from '../shared/constants.js'
 import { B, BLOCKS } from '../shared/blocks.js'
-import { HOTBAR, TOOL_BY_ID, toolSpeedOn, FAMILY, isTool, breakDelay } from '../shared/items.js'
-import { MOB_BY_ID } from '../shared/mobs.js'
+import { HOTBAR, TOOL_BY_ID, toolSpeedOn, isTool, breakDelay } from '../shared/items.js'
 
 const app = document.getElementById('app')
 const hud = new Hud(document.body)
@@ -24,30 +26,40 @@ const worldRenderer = new WorldRenderer(app)
 const world = new ClientWorld()
 const remotes = new RemotePlayers(worldRenderer.scene)
 const mobView = new MobView(worldRenderer.scene)
-const controller = new PlayerController(worldRenderer.camera, worldRenderer.renderer.domElement)
+const letterSign = new LetterSign(worldRenderer.scene)
+const dom = worldRenderer.renderer.domElement
+const controller = new PlayerController(worldRenderer.camera, dom)
 // what you are holding, drawn in view space
 const handView = new HandView(worldRenderer.camera, worldRenderer.atlas)
 hud.onSelect = (item) => handView.setItem(item)
 
+// Tablets get on-screen controls and no mouse: no pointer lock, no right-click.
+const isTouch = isTouchDevice()
+document.body.classList.toggle('touch', isTouch)
+const touch = isTouch
+  ? new TouchControls({
+    root: document.body,
+    canvas: dom,
+    controller,
+    onPlace: () => placeBlock(),
+    onCheck: () => checkCity(),
+  })
+  : null
+
 const serverUrl = resolveServerUrl()
 const params = new URLSearchParams(location.search)
 const autoJoin = params.get('autoplay') === '1'
-const randomName = `Player-${Math.floor(1000 + Math.random() * 9000)}`
+const randomName = `Игрок-${Math.floor(1000 + Math.random() * 9000)}`
 const defaultName = params.get('name') || randomName
 
 let joined = false
 let selfId = null
 let selfName = defaultName
-let selfHp = PLAYER_MAX_HP
-let maxHp = PLAYER_MAX_HP
 let inputSeq = 1
-let attackSeq = 1
 let buildMs = 0
 let fps = 0
-let dead = false
 /** client-side pacing so breaking feels like the tool, not just the server */
 let breakReadyAt = 0
-let attackReadyAt = 0
 
 // ---------------------------------------------------------------- selection
 
@@ -73,7 +85,7 @@ const connection = new Connection({
   name: defaultName,
   onStatus: (state) => {
     hud.setStatus(state)
-    hud.setJoinEnabled(state === 'connected', state === 'connected' ? 'Join' : 'Connecting…')
+    hud.setJoinEnabled(state === 'connected', state === 'connected' ? 'Играть' : 'Подключение…')
     if (state !== 'connected') {
       joined = false
       hud.showOverlay(true)
@@ -82,8 +94,8 @@ const connection = new Connection({
   onOpen: () => {
     // The name from ?name= already went out in the hello, so autoplay only
     // needs to get out of the way — reconnecting here would loop forever.
-    hud.setJoinEnabled(true, autoJoin ? 'Joined' : 'Join')
-    if (autoJoin) hud.setHint('Joining…')
+    hud.setJoinEnabled(true, autoJoin ? 'В игре' : 'Играть')
+    if (autoJoin) hud.setHint('Входим…')
   },
   onMessage: handleMessage,
 })
@@ -93,8 +105,8 @@ const connection = new Connection({
 function handleMessage(msg) {
   switch (msg.type) {
     case S2C.INIT: return onInit(msg)
-    case S2C.PLAYER_JOIN: remotes.add(msg); return syncRoster()
-    case S2C.PLAYER_LEAVE: remotes.remove(msg.id); return syncRoster()
+    case S2C.PLAYER_JOIN: remotes.add(msg); return
+    case S2C.PLAYER_LEAVE: remotes.remove(msg.id); return
     case S2C.SNAPSHOT:
       remotes.applySnapshot(msg.players, msg.t)
       if (msg.mobs) mobView.applySnapshot(msg.mobs)
@@ -102,7 +114,7 @@ function handleMessage(msg) {
     case S2C.BLOCK_CHANGED: reconciler.onBlockChanged(msg); return
     case S2C.EDIT_REJECTED:
       reconciler.onEditRejected(msg)
-      hud.toast('Someone else changed that block first', 'info')
+      hud.toast('Этот блок уже изменил кто-то другой', 'info')
       return
     case S2C.CORRECTION:
       controller.setPosition(msg.x, msg.y, msg.z)
@@ -110,35 +122,14 @@ function handleMessage(msg) {
       controller.pitch = msg.pitch
       return
     case S2C.MOB_GONE: mobView.remove(msg.id); return
-    case S2C.HURT: return onHurt(msg)
-    case S2C.DIED:
-      if (msg.id === selfId) enterDeathState()
-      return
-    case S2C.RESPAWNED:
-      if (msg.id === selfId) leaveDeathState(msg.hp)
-      return
+    case S2C.CITY: onCity(msg); return
+    case S2C.SCORES: hud.setScores(msg.scores, selfId); return
     case S2C.ERROR:
-      // a dropped break / rejected swing is normal pacing, not a problem
-      if (msg.code === 'too_fast' || msg.code === 'dead') return
+      // a dropped break is normal pacing, not a problem
+      if (msg.code === 'too_fast') return
       hud.toast(msg.message || ERRORS[msg.code] || msg.code)
       return
     default:
-  }
-}
-
-function onHurt(msg) {
-  const id = Number(msg.target.slice(1))
-  const isSelf = msg.target === `p${selfId}`
-  if (msg.kind === 'mob') {
-    mobView.flash(id)
-    return
-  }
-  remotes.flash(id)
-  if (isSelf) {
-    selfHp = msg.hp
-    hud.setHealth(selfHp, maxHp)
-    hud.flashHurt(msg.amount / 5)
-    if (msg.killed) enterDeathState()
   }
 }
 
@@ -146,8 +137,6 @@ function onInit(msg) {
   const t0 = performance.now()
   selfId = msg.selfId
   selfName = msg.name
-  maxHp = msg.maxHp || PLAYER_MAX_HP
-  selfHp = maxHp
   connection.name = msg.name
 
   world.generate(msg.seed)
@@ -167,36 +156,29 @@ function onInit(msg) {
   if (msg.mobs) mobView.applySnapshot(msg.mobs)
 
   hud.attachAtlas(worldRenderer.atlas.image)
+  hud.offerMission(msg.city?.mission)
+  letterSign.sync(msg.city?.cube)
+  hud.setScores(msg.scores, selfId)
   handView.setItem(HOTBAR[hud.selected])
-  hud.setHealth(selfHp, maxHp)
   hud.showOverlay(false)
-  hud.setHint('Click the world to look around')
-  hud.toast(`Joined as ${msg.name} · world built in ${buildMs} ms`, 'info')
+  hud.setHint(isTouch ? 'Проведи пальцем по экрану, чтобы смотреть' : 'Нажми на экран, чтобы смотреть по сторонам')
+  hud.toast(`Ты в игре, ${msg.name}!`, 'info')
 
   joined = true
   reconciler.reset()
-  syncRoster()
 }
 
-function syncRoster() {
-  const all = [{ id: selfId, name: selfName, color: '#e6edf3' }, ...remotes.list()]
-  hud.updateRoster(selfId, all)
-}
-
-function enterDeathState() {
-  dead = true
-  controller.dead = true
-  hud.setDead(true)
-  hud.setHint('')
-}
-
-function leaveDeathState(hp) {
-  dead = false
-  controller.dead = false
-  selfHp = hp || maxHp
-  hud.setDead(false)
-  hud.setHealth(selfHp, maxHp)
-  hud.setHint('Respawned')
+function onCity(msg) {
+  hud.offerMission(msg.mission)
+  letterSign.sync(msg.cube)
+  if (msg.reward) {
+    hud.toast(`${msg.reward.by} нашёл букву ${msg.reward.letter}! +${msg.reward.points}`, 'info')
+  }
+  if (msg.error === 'no_dispatch') hud.toast('Нужна диспетчерская: поставь её и проверь город', 'error')
+  for (const id of msg.newlyCompleted || []) {
+    const mission = MISSIONS.find((m) => m.id === id)
+    if (mission) hud.toast(`Миссия выполнена: ${mission.title}`, 'info')
+  }
 }
 
 // ------------------------------------------------------------------ joining
@@ -205,7 +187,7 @@ function join() {
   const name = (hud.nameInput.value || defaultName).trim().slice(0, 16) || defaultName
   connection.name = name
   hud.showOverlay(false)
-  hud.setHint('Connecting…')
+  hud.setHint('Подключение…')
   // hello carries the name and may only be sent once per socket, so a name
   // change needs a fresh connection (the resume token keeps the identity).
   connection.reconnect()
@@ -219,70 +201,51 @@ hud.nameInput.value = defaultName
 
 // ----------------------------------------------------------------- controls
 
-const dom = worldRenderer.renderer.domElement
 dom.addEventListener('contextmenu', (e) => e.preventDefault())
 
-/** Mobs and other players the crosshair could be aimed at. */
-function combatTargets() {
-  const targets = mobView.list().map((m) => ({
-    target: `m${m.id}`, x: m.x, y: m.y, z: m.z, aimY: MOB_BY_ID.get(m.kind).height * 0.5,
-    label: MOB_BY_ID.get(m.kind).name,
-  }))
-  for (const p of remotes.list()) {
-    targets.push({ target: `p${p.id}`, x: p.x, y: p.y, z: p.z, aimY: 0.9, label: p.name })
-  }
-  return targets
+/** Break the block under the crosshair, paced by the held tool. */
+function breakBlock() {
+  if (!joined) return
+  const hit = controller.pick(world, hud.selectedTool)
+  if (!hit) return
+  if (Date.now() < breakReadyAt) return
+  breakReadyAt = Date.now() + breakDelay(hud.selectedTool, hit.id) * 1000
+  controller.startSwing()
+  reconciler.requestEdit(hit.x, hit.y, hit.z, B.AIR)
 }
 
-function tryAttack() {
-  const tool = hud.selectedTool
-  const target = controller.pickEntity(combatTargets(), tool)
-  controller.startSwing()
-  if (!target) return false
-  if (Date.now() < attackReadyAt) return true
-  attackReadyAt = Date.now() + 450
-  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(controller.camera.quaternion)
-  connection.send(C2S.ATTACK, {
-    seq: attackSeq++, target: target.target, tool, dir: [dir.x, dir.y, dir.z],
-  })
-  return true
+/** Place the selected block against the face under the crosshair. */
+function placeBlock() {
+  if (!joined) return
+  const block = hud.selectedBlock
+  if (!block) return
+  const hit = controller.pick(world, hud.selectedTool)
+  if (!hit) return
+  const tx = hit.x + hit.nx
+  const ty = hit.y + hit.ny
+  const tz = hit.z + hit.nz
+  const current = world.get(tx, ty, tz)
+  if (current !== B.AIR && current !== B.WATER) return
+  if (overlapsPlayer(tx, ty, tz)) return
+  if (Date.now() < breakReadyAt) return
+  breakReadyAt = Date.now() + breakDelay(hud.selectedTool, hit.id) * 1000
+  reconciler.requestEdit(tx, ty, tz, block)
+}
+
+/** "Проверить город", from the C key or the check button. */
+function checkCity() {
+  if (!joined) return
+  connection.send(C2S.CHECK, {})
 }
 
 dom.addEventListener('mousedown', (e) => {
-  if (!joined) return
+  if (!joined || isTouch) return
   if (!controller.locked) {
     controller.requestLock()
     return
   }
-  if (dead) return
-
-  if (e.button === 0) {
-    // left click: hit whatever is in front of you, otherwise break a block
-    if (tryAttack()) return
-    const hit = controller.pick(world, hud.selectedTool)
-    if (!hit) return
-    if (Date.now() < breakReadyAt) return
-    breakReadyAt = Date.now() + breakDelay(hud.selectedTool, hit.id) * 1000
-    controller.startSwing()
-    reconciler.requestEdit(hit.x, hit.y, hit.z, B.AIR)
-    return
-  }
-
-  if (e.button === 2) {
-    const block = hud.selectedBlock
-    if (!block) return
-    const hit = controller.pick(world, hud.selectedTool)
-    if (!hit) return
-    const tx = hit.x + hit.nx
-    const ty = hit.y + hit.ny
-    const tz = hit.z + hit.nz
-    const current = world.get(tx, ty, tz)
-    if (current !== B.AIR && current !== B.WATER) return
-    if (overlapsPlayer(tx, ty, tz)) return
-    if (Date.now() < breakReadyAt) return
-    breakReadyAt = Date.now() + breakDelay(hud.selectedTool, hit.id) * 1000
-    reconciler.requestEdit(tx, ty, tz, block)
-  }
+  if (e.button === 0) breakBlock()
+  if (e.button === 2) placeBlock()
 })
 
 dom.addEventListener('wheel', (e) => {
@@ -293,6 +256,10 @@ dom.addEventListener('wheel', (e) => {
 window.addEventListener('keydown', (e) => {
   if (!joined) return
   if (e.code === 'Escape') return
+  if (e.code === 'KeyC') {
+    checkCity()
+    return
+  }
   const n = Number(e.key)
   if (Number.isInteger(n) && n >= 1 && n <= HOTBAR.length) {
     hud.select(n - 1)
@@ -300,7 +267,7 @@ window.addEventListener('keydown', (e) => {
 })
 
 controller.onLockChange = (locked) => {
-  hud.setHint(locked ? '' : 'Click the world to resume')
+  hud.setHint(locked ? '' : 'Нажми на экран, чтобы продолжить')
 }
 
 /** Would a block at this cell intersect the player AABB? */
@@ -319,7 +286,6 @@ const timer = new THREE.Timer()
 let fpsAcc = 0
 let fpsFrames = 0
 let inputAcc = 0
-let rosterAcc = 0
 
 function tick() {
   requestAnimationFrame(tick)
@@ -335,10 +301,11 @@ function tick() {
   }
 
   if (joined) {
+    if (touch?.breaking) breakBlock()
     controller.update(dt, world)
     handView.update(controller.swing, Math.hypot(controller.vel.x, controller.vel.z), dt)
-    remotes.update(connection.serverTime(), dt)
-    mobView.update(dt)
+    remotes.update(connection.serverTime())
+    mobView.update()
 
 
     inputAcc += dt
@@ -353,26 +320,20 @@ function tick() {
         yaw: controller.yaw,
         pitch: controller.pitch,
         t: connection.serverTime(),
-        hp: selfHp,
         item: hud.selectedTool,
       })
     }
   }
 
   const tool = hud.selectedTool
-  const target = joined && !dead ? controller.pickEntity(combatTargets(), tool) : null
   const hit = joined ? controller.pick(world, tool) : null
 
-  if (target) {
-    selection.visible = false
-    hud.setTargetInfo(`${target.label}  ·  left click to hit`)
-  } else if (hit) {
+  if (hit) {
     selection.visible = true
     selection.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5)
     const speed = toolSpeedOn(tool, hit.id)
-    const family = FAMILY[hit.id]
     hud.setTargetInfo(speed > 1.2
-      ? `${BLOCK_NAME(hit.id)} · ${TOOL_NAME(tool)} is fast here`
+      ? `Быстро копается: ${BLOCK_NAME(hit.id)}`
       : '')
   } else {
     selection.visible = false
@@ -384,26 +345,10 @@ function tick() {
 
   worldRenderer.flush(world)
   worldRenderer.render()
-
-  rosterAcc += dt
-  if (rosterAcc >= 0.25) {
-    rosterAcc = 0
-    hud.updateStats({
-      state: connection.state,
-      rtt: connection.rtt,
-      ping: connection.rtt,
-      count: remotes.count + (joined ? 1 : 0),
-      mobs: mobView.count,
-      tris: worldRenderer.countTriangles(),
-      pos: joined
-        ? `${controller.pos.x.toFixed(1)}, ${controller.pos.y.toFixed(1)}, ${controller.pos.z.toFixed(1)}`
-        : '—',
-    })
-  }
 }
 
 const BLOCK_NAME = (id) => BLOCKS[id]?.name || 'block'
-const TOOL_NAME = (id) => (isTool(id) ? TOOL_BY_ID.get(id).name : 'bare hands')
+const TOOL_NAME = (id) => (isTool(id) ? TOOL_BY_ID.get(id).name : 'руки')
 
 // ------------------------------------------------------------- debug handle
 
@@ -422,35 +367,28 @@ window.__voxel = {
     pendingEdits: reconciler.pendingCount,
     worldVersion: world.version,
     seed: world.seed,
-    hp: selfHp,
-    dead,
     mobs: mobView.count,
   }),
   getBlock: (x, y, z) => world.get(x, y, z),
+  pick: () => controller.pick(world, hud.selectedTool),
   isSolidAt: (x, y, z) => world.isSolid(x, y, z),
   getPlayers: () => remotes.list(),
   getMobs: () => mobView.list(),
   getTriangles: () => worldRenderer.triangles || worldRenderer.countTriangles(),
   /** Drive an edit from the console / automation. */
   edit: (x, y, z, block) => reconciler.requestEdit(x, y, z, block),
-  /** Drive a swing from the console / automation. */
-  attack: (target) => {
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(controller.camera.quaternion)
-    controller.startSwing()
-    return connection.send(C2S.ATTACK, {
-      seq: attackSeq++, target, tool: hud.selectedTool, dir: [dir.x, dir.y, dir.z],
-    })
-  },
   selectSlot: (i) => { hud.select(i); return { ...HOTBAR[hud.selected], tool: hud.selectedTool, block: hud.selectedBlock } },
   getSelected: () => ({ ...HOTBAR[hud.selected], tool: hud.selectedTool, block: hud.selectedBlock }),
-  getCombatTargets: () => combatTargets(),
   setLook: (yaw, pitch) => { controller.yaw = yaw; controller.pitch = pitch },
+  getLook: () => ({ yaw: controller.yaw, pitch: controller.pitch }),
   teleport: (x, y, z) => controller.setPosition(x, y, z),
-  getHealth: () => ({ hp: selfHp, max: maxHp, dead }),
   getPosition: () => ({ x: controller.pos.x, y: controller.pos.y, z: controller.pos.z }),
   hotbar: HOTBAR,
 }
 
 hud.setStatus('idle')
-connection.connect()
-tick()
+// the block swatches in the hotbar read pixels from the atlas, so wait for it
+worldRenderer.atlas.ready.then(() => {
+  connection.connect()
+  tick()
+})

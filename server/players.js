@@ -9,9 +9,7 @@ import {
   SPEED_STRIKE_LIMIT, SPEED_STRIKE_WINDOW_MS,
   EDIT_MIN_INTERVAL_MS, EDIT_BURST, EDIT_BURST_WINDOW_MS,
   INTEREST_RADIUS, MAX_BAD_MESSAGES, WORLD_X, WORLD_Y, WORLD_Z,
-  PLAYER_COLORS, INPUT_HZ, PLAYER_MAX_HP, PLAYER_REGEN_DELAY_MS, PLAYER_REGEN_PERIOD,
-  PLAYER_REGEN_AMOUNT,
-  RESPAWN_MS,
+  PLAYER_COLORS, INPUT_HZ,
 } from '../shared/constants.js'
 import { breakDelay, BREAK_GRACE } from '../shared/items.js'
 
@@ -102,20 +100,14 @@ export class PlayerRegistry {
     const remembered = typeof resumeToken === 'string' ? this.recent.get(resumeToken) : undefined
     if (remembered && now - remembered.at < RESUME_TTL_MS) {
       this.recent.delete(resumeToken)
-      // a reconnect is a fresh life: never resume into a corpse
-      const back = remembered.dead ? this.world.spawn() : { x: remembered.x, y: remembered.y, z: remembered.z }
+      const back = { x: remembered.x, y: remembered.y, z: remembered.z }
       const player = {
         ...remembered,
         socket,
         name: this.uniqueName(remembered.name),
         x: back.x, y: back.y, z: back.z,
-        hp: PLAYER_MAX_HP,
-        deadUntil: 0,
-        lastHurtAt: 0,
-        flashUntil: 0,
         editTimes: [],
         lastBreakAt: null,
-        lastAttackAt: 0,
         speedStrikes: [],
         badMessages: 0,
         lastInputAt: now,
@@ -132,6 +124,7 @@ export class PlayerRegistry {
       socket,
       name: this.uniqueName(clean),
       color: this.pickColor(),
+      score: 0,
       resumeToken: randomBytes(12).toString('hex'),
       x: spawn.x, y: spawn.y, z: spawn.z,
       yaw: 0, pitch: 0,
@@ -139,11 +132,6 @@ export class PlayerRegistry {
       lastInputAt: now,
       editTimes: [],
       lastBreakAt: null,
-      lastAttackAt: 0,
-      hp: PLAYER_MAX_HP,
-      deadUntil: 0,
-      lastHurtAt: 0,
-      flashUntil: 0,
       speedStrikes: [],
       badMessages: 0,
       helloedAt: now,
@@ -178,10 +166,10 @@ export class PlayerRegistry {
       id: player.id,
       name: player.name,
       color: player.color,
+      score: player.score,
       resumeToken: player.resumeToken,
       x: player.x, y: player.y, z: player.z,
       yaw: player.yaw, pitch: player.pitch,
-      dead: player.hp <= 0,
       at: Date.now(),
     })
     this.closeSocket(player, code, reason)
@@ -287,63 +275,6 @@ export class PlayerRegistry {
     }
     player.lastBreakAt = now
     return { ok: true, waitMs: 0 }
-  }
-
-  /** @returns {{ok:true}|{ok:false,code:string}} */
-  canAttack(player, cooldown, now = Date.now()) {
-    if (player.hp <= 0) return { ok: false, code: 'dead' }
-    if (now - player.lastAttackAt < cooldown * 1000) return { ok: false, code: 'too_fast' }
-    return { ok: true }
-  }
-
-  markAttack(player, now = Date.now()) {
-    player.lastAttackAt = now
-  }
-
-  /**
-   * Apply damage to a player and resolve death.
-   * @returns {{killed:boolean, hp:number}}
-   */
-  hurtPlayer(player, amount, now = Date.now()) {
-    if (player.hp <= 0) return { killed: false, hp: 0 }
-    player.hp = Math.max(0, player.hp - amount)
-    player.lastHurtAt = now
-    player.flashUntil = now + 200
-    if (player.hp === 0) {
-      player.deadUntil = now + RESPAWN_MS
-      return { killed: true, hp: 0 }
-    }
-    return { killed: false, hp: player.hp }
-  }
-
-  /**
-   * Slow out-of-combat regen, and respawn anyone whose timer expired.
-   * @returns {{respawned:object[]}}
-   */
-  tickVitals(now = Date.now()) {
-    const respawned = []
-    for (const p of this.players.values()) {
-      if (p.hp > 0) {
-        if (p.hp < PLAYER_MAX_HP && now - p.lastHurtAt > PLAYER_REGEN_DELAY_MS) {
-          p.hp = Math.min(PLAYER_MAX_HP, p.hp + PLAYER_REGEN_AMOUNT)
-          p.lastHurtAt = now - PLAYER_REGEN_DELAY_MS + PLAYER_REGEN_PERIOD
-        }
-        continue
-      }
-      if (p.deadUntil && now >= p.deadUntil) {
-        const spawn = this.world.spawn()
-        p.x = spawn.x
-        p.y = spawn.y
-        p.z = spawn.z
-        p.yaw = 0
-        p.pitch = 0
-        p.hp = PLAYER_MAX_HP
-        p.deadUntil = 0
-        p.lastHurtAt = now
-        respawned.push(p)
-      }
-    }
-    return { respawned }
   }
 
   /** Players the receiver should know about, stable order by id. */

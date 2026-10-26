@@ -20,6 +20,8 @@ export async function startTestServer(options = {}) {
     quiet: true,
     saveIntervalMs: 1000,
     dataDir,
+    // the letter cube is an extra edit, so tests that count edits opt in
+    letterHunt: false,
     ...options,
   })
   const port = await server.ready

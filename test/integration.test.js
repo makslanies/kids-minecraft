@@ -513,142 +513,9 @@ test('teardown: closing the server disconnects everyone', async () => {
   assert.equal(closed.code, 1006)
 })
 
-// ------------------------------------------------------------------ combat
+// ------------------------------------------------------------- animals
 
-/** Walk a client next to a world position, then face it. */
-async function approach(client, from, to) {
-  await walkTo(client, from, { x: to.x, z: to.z })
-}
-
-function faceYaw(from, to) {
-  return Math.atan2(-(to.x - from.x), -(to.z - from.z))
-}
-
-test('combat: a swing in reach damages a mob and a kill removes it', async () => {
-  const ctx = await startTestServer({})
-  try {
-    const a = await TestClient.connect(ctx.url, 'Alice')
-    const mob = ctx.server.mobs.all()[0]
-    const def = mob.hp
-    const me = ctx.server.players.get(a.all(S2C.INIT)[0].selfId)
-
-    // set the scene: a mob an arm's length away. Walking to a wandering animal
-    // would make the test depend on its mood.
-    mob.pos.x = me.x + 1.2
-    mob.pos.y = me.y
-    mob.pos.z = me.z
-    assert.ok(Math.hypot(me.x - mob.pos.x, me.z - mob.pos.z) < 3.2, 'inside sword reach')
-
-    const dir = [0, 0, -1]
-    a.send(C2S.ATTACK, { seq: 1, target: `m${mob.id}`, tool: 4, dir })
-    const hurt = await a.waitFor((m) => m.type === S2C.HURT && m.target === `m${mob.id}`)
-    assert.equal(hurt.amount, 5, 'sword damage')
-    assert.equal(hurt.killed, false)
-    assert.equal(ctx.server.mobs.get(mob.id).hp, def - 5)
-
-    // a second swing lands, then a third kills it
-    a.send(C2S.ATTACK, { seq: 2, target: `m${mob.id}`, tool: 4, dir })
-    await sleep(600)
-    a.send(C2S.ATTACK, { seq: 3, target: `m${mob.id}`, tool: 4, dir })
-    const gone = await a.waitFor((m) => m.type === S2C.MOB_GONE && m.id === mob.id)
-    assert.equal(gone.id, mob.id)
-    assert.equal(ctx.server.mobs.get(mob.id), undefined)
-  } finally {
-    await ctx.server.close()
-  }
-})
-
-test('combat: out of reach and too-fast swings are refused', async () => {
-  const ctx = await startTestServer({})
-  try {
-    const a = await TestClient.connect(ctx.url, 'Alice')
-    const mob = ctx.server.mobs.all()[0]
-    const me = ctx.server.players.get(1)
-    // park the mob far away and on the same level
-    mob.pos.x = me.x + 30
-    mob.pos.y = me.y
-    mob.pos.z = me.z
-    a.send(C2S.ATTACK, { seq: 1, target: `m${mob.id}`, tool: 4, dir: [0, 0, -1] })
-    const err = await a.waitFor((m) => m.type === S2C.ERROR && m.code === 'bad_target')
-    assert.equal(err.code, 'bad_target', 'a swing at 30m does not connect')
-    assert.equal(mob.hp, mob.hp, 'hp untouched')
-  } finally {
-    await ctx.server.close()
-  }
-})
-
-test('combat: attack cooldown is enforced per player', async () => {
-  const ctx = await startTestServer({})
-  try {
-    const a = await TestClient.connect(ctx.url, 'Alice')
-    const mob = ctx.server.mobs.all()[0]
-    const me = ctx.server.players.get(1)
-    mob.pos.x = me.x + 1
-    mob.pos.y = me.y
-    mob.pos.z = me.z
-
-    a.send(C2S.ATTACK, { seq: 1, target: `m${mob.id}`, tool: 4, dir: [0, 0, -1] })
-    await a.waitFor((m) => m.type === S2C.HURT)
-    a.send(C2S.ATTACK, { seq: 2, target: `m${mob.id}`, tool: 4, dir: [0, 0, -1] })
-    const err = await a.waitFor((m) => m.type === S2C.ERROR && m.code === 'too_fast')
-    assert.equal(err.code, 'too_fast')
-  } finally {
-    await ctx.server.close()
-  }
-})
-
-test('combat: two players can kill each other, and death respawns you', async () => {
-  const ctx = await startTestServer({})
-  try {
-    const a = await TestClient.connect(ctx.url, 'Alice')
-    const b = await TestClient.connect(ctx.url, 'Bob')
-    const alice = ctx.server.players.get(a.all(S2C.INIT)[0].selfId)
-    const bob = ctx.server.players.get(b.all(S2C.INIT)[0].selfId)
-
-    // walk Alice to within sword reach of Bob
-    await walkTo(a, { x: alice.x, y: alice.y, z: alice.z }, { x: bob.x, z: bob.z })
-    assert.ok(ctx.server.players.get(alice.id), 'Alice is still connected')
-    assert.ok(Math.hypot(alice.x - bob.x, alice.z - bob.z) < 3.0,
-      `in sword reach (distance ${Math.hypot(alice.x - bob.x, alice.z - bob.z).toFixed(1)})`)
-
-    const aId = alice.id
-    // sword: 5 damage, 20 hp -> four hits
-    for (let i = 0; i < 4; i++) {
-      a.send(C2S.ATTACK, { seq: 100 + i, target: `p${bob.id}`, tool: 4, dir: [0, 0, -1] })
-      await sleep(520)
-    }
-
-    const died = await a.waitFor((m) => m.type === S2C.DIED && m.id === bob.id, 4000)
-    assert.equal(died.id, bob.id)
-    assert.equal(ctx.server.players.get(bob.id).hp, 0, 'the server considers Bob dead')
-
-    // the corpse freezes, then comes back at the plaza with full health
-    const seen = await b.waitFor((m) => m.type === S2C.RESPAWNED && m.id === bob.id, 6000)
-    assert.equal(seen.id, bob.id)
-    assert.equal(ctx.server.players.get(bob.id).hp, 20)
-    assert.ok(Math.hypot(bob.x - 32.5, bob.z - 32.5) < 2, 'respawned on the plaza')
-    void aId
-  } finally {
-    await ctx.server.close()
-  }
-})
-
-test('combat: a dead player cannot swing', async () => {
-  const ctx = await startTestServer({})
-  try {
-    const a = await TestClient.connect(ctx.url, 'Alice')
-    const me = ctx.server.players.get(1)
-    me.hp = 0
-    me.deadUntil = Date.now() + 1000
-    a.send(C2S.ATTACK, { seq: 1, target: 'm1', tool: 4, dir: [0, 0, -1] })
-    const err = await a.waitFor((m) => m.type === S2C.ERROR && m.code === 'dead')
-    assert.equal(err.code, 'dead')
-  } finally {
-    await ctx.server.close()
-  }
-})
-
-test('combat: mobs ride along in snapshots and stay inside the world', async () => {
+test('animals: they ride along in snapshots and stay inside the world', async () => {
   const ctx = await startTestServer({})
   try {
     const a = await TestClient.connect(ctx.url, 'Alice')
@@ -670,7 +537,7 @@ test('combat: mobs ride along in snapshots and stay inside the world', async () 
   }
 })
 
-test('combat: the tool in hand paces breaking, and the server drops it', async () => {
+test('breaking: the tool in hand paces breaking, and the server drops it', async () => {
   const ctx = await startTestServer({})
   try {
     const a = await TestClient.connect(ctx.url, 'Alice')

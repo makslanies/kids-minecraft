@@ -8,7 +8,7 @@ export const C2S = {
   INPUT: 'input',
   BLOCK_EDIT: 'blockEdit',
   PING: 'ping',
-  ATTACK: 'attack',
+  CHECK: 'check',
 }
 
 export const S2C = {
@@ -21,10 +21,9 @@ export const S2C = {
   CORRECTION: 'correction',
   PONG: 'pong',
   ERROR: 'error',
-  HURT: 'hurt',
-  DIED: 'died',
-  RESPAWNED: 'respawned',
   MOB_GONE: 'mobGone',
+  CITY: 'city',
+  SCORES: 'scores',
 }
 
 export const ERR = {
@@ -37,41 +36,33 @@ export const ERR = {
   SPEED: 'speed',
   SERVER_FULL: 'server_full',
   CONFLICT: 'conflict',
-  BAD_TARGET: 'bad_target',
-  TOO_FAST: 'too_fast',
-  DEAD: 'dead',
 }
 
 export const ERRORS = {
-  [ERR.BAD_MESSAGE]: 'malformed message',
-  [ERR.BAD_NAME]: 'invalid player name',
-  [ERR.NOT_HELLOED]: 'send hello first',
-  [ERR.OUT_OF_BOUNDS]: 'coordinates outside the world',
-  [ERR.BAD_BLOCK]: 'that block cannot be placed or removed',
-  [ERR.RATE_LIMITED]: 'editing too fast, slow down',
-  [ERR.SPEED]: 'impossible movement, position reset',
-  [ERR.SERVER_FULL]: 'server is full',
-  [ERR.CONFLICT]: 'someone else changed that block first',
-  [ERR.BAD_TARGET]: 'nothing to hit there',
-  [ERR.TOO_FAST]: 'swing too fast',
-  [ERR.DEAD]: 'you are dead',
+  [ERR.BAD_MESSAGE]: 'сообщение не понятно',
+  [ERR.BAD_NAME]: 'неверное имя',
+  [ERR.NOT_HELLOED]: 'сначала войди в игру',
+  [ERR.OUT_OF_BOUNDS]: 'это место за пределами мира',
+  [ERR.BAD_BLOCK]: 'этот блок нельзя поставить или сломать',
+  [ERR.RATE_LIMITED]: 'слишком быстро, подожди немного',
+  [ERR.SPEED]: 'слишком быстро, возвращаю назад',
+  [ERR.SERVER_FULL]: 'в игре уже много ребят',
+  [ERR.CONFLICT]: 'этот блок уже изменил кто-то другой',
 }
 
 const num = (v) => typeof v === 'number' && Number.isFinite(v)
 const int = (v) => Number.isInteger(v)
 const optInt = (v) => v === undefined || v === null || Number.isInteger(v)
-const optNum = (v) => v === undefined || v === null || num(v)
 const str = (v) => typeof v === 'string'
 const optStr = (v) => v === undefined || v === null || typeof v === 'string'
-const arr3 = (v) => Array.isArray(v) && v.length === 3 && v.every(num)
 
 /** Required-field spec per inbound message type. */
 const SPEC = {
   [C2S.HELLO]: { name: str, resumeToken: optStr },
-  [C2S.INPUT]: { seq: int, x: num, y: num, z: num, yaw: num, pitch: num, t: num, item: optInt, hp: optNum },
+  [C2S.INPUT]: { seq: int, x: num, y: num, z: num, yaw: num, pitch: num, t: num, item: optInt },
   [C2S.BLOCK_EDIT]: { seq: int, x: int, y: int, z: int, block: int, expected: int, tool: optInt },
   [C2S.PING]: { t: num },
-  [C2S.ATTACK]: { seq: int, target: str, tool: int, dir: arr3 },
+  [C2S.CHECK]: {},
 }
 
 export const INBOUND_TYPES = Object.keys(SPEC)
@@ -117,8 +108,7 @@ export const serverMsg = {
   correction: (p) => encode(S2C.CORRECTION, p),
   pong: (p) => encode(S2C.PONG, p),
   error: (code, message) => encode(S2C.ERROR, { code, message: message || ERRORS[code] || code }),
-  hurt: (p) => encode(S2C.HURT, p),
-  died: (p) => encode(S2C.DIED, p),
-  respawned: (p) => encode(S2C.RESPAWNED, p),
+  city: (p) => encode(S2C.CITY, p),
+  scores: (p) => encode(S2C.SCORES, p),
   mobGone: (p) => encode(S2C.MOB_GONE, p),
 }

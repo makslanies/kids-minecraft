@@ -236,8 +236,8 @@ test('S2C message names are the ones the client switches on', () => {
   assert.deepEqual(
     Object.values(S2C).sort(),
     [
-      'blockChanged', 'correction', 'died', 'editRejected', 'error', 'hurt', 'init',
-      'mobGone', 'playerJoin', 'playerLeave', 'pong', 'respawned', 'snapshot',
+      'blockChanged', 'city', 'correction', 'editRejected', 'error', 'init',
+      'mobGone', 'playerJoin', 'playerLeave', 'pong', 'scores', 'snapshot',
     ],
   )
 })
@@ -245,6 +245,6 @@ test('S2C message names are the ones the client switches on', () => {
 test('C2S message names are the ones the server routes', () => {
   assert.deepEqual(
     Object.values(C2S).sort(),
-    ['attack', 'blockEdit', 'hello', 'input', 'ping'],
+    ['blockEdit', 'check', 'hello', 'input', 'ping'],
   )
 })

@@ -1,5 +1,6 @@
 // Mob species. The AI itself lives in server/mobs.js — this file is only the
 // data both sides need, and it must stay free of any environment API.
+// Animals are decoration: they wander and cannot be hurt.
 
 export const MOB_PIG = 0
 export const MOB_GOAT = 1
@@ -9,16 +10,14 @@ export const MOB_KINDS = ['mob', 'player']
 
 /**
  * halfW/height are the AABB the shared collision uses, so a mob is exactly as
- * big as it looks. `speed` is m/s, `flee` the multiplier while it is scared.
+ * big as it looks. `speed` is m/s.
  */
 export const MOBS = [
   {
     id: MOB_PIG,
     key: 'pig',
-    name: 'pig',
-    hp: 10,
+    name: 'свинка',
     speed: 1.5,
-    fleeSpeed: 2.4,
     halfW: 0.45,
     height: 0.9,
     body: '#eda3ab',
@@ -30,10 +29,8 @@ export const MOBS = [
   {
     id: MOB_GOAT,
     key: 'goat',
-    name: 'goat',
-    hp: 8,
+    name: 'коза',
     speed: 1.9,
-    fleeSpeed: 3.4,
     halfW: 0.32,
     height: 1.0,
     body: '#ded6c4',
@@ -45,10 +42,8 @@ export const MOBS = [
   {
     id: MOB_CHICKEN,
     key: 'chicken',
-    name: 'chicken',
-    hp: 6,
+    name: 'курица',
     speed: 1.2,
-    fleeSpeed: 2.0,
     halfW: 0.24,
     height: 0.65,
     body: '#f2f0ea',
@@ -73,8 +68,3 @@ export const MOB_COUNT = MOB_POPULATION.reduce((n, e) => n + e.count, 0)
 
 /** Mobs are dropped a bit before they would be culled by the interest radius. */
 export const MOB_SPAWN_MARGIN = 4
-
-export const KNOCKBACK = 5.2
-export const KNOCKBACK_Y = 4.4
-/** Metres a *player* is pushed when hit; the server moves the body directly. */
-export const PLAYER_KNOCKBACK = 0.9

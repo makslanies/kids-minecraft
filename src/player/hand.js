@@ -5,7 +5,7 @@
 
 import * as THREE from 'three'
 import { BLOCKS, tileFor, ATLAS_COLS, ATLAS_ROWS } from '../../shared/blocks.js'
-import { TOOL_BY_KEY, TOOLS, TOOL_SWORD } from '../../shared/items.js'
+import { TOOL_BY_ID, TOOLS } from '../../shared/items.js'
 
 const FACE_TILES = ['side', 'side', 'top', 'bottom', 'side', 'side']
 
@@ -56,16 +56,10 @@ const HANDLE = 0x8a6a44
  * so the parts read like the 2D hotbar icons.
  */
 function toolMesh(toolId) {
-  const key = TOOL_BY_KEY.get(toolId)?.key || 'sword'
+  const key = TOOL_BY_ID.get(toolId)?.key
   const g = new THREE.Group()
 
-  if (key === 'sword') {
-    g.add(part(0.032, 0.40, 0.014, STEEL, 0, 0.30, 0))         // blade
-    g.add(part(0.040, 0.05, 0.018, STEEL_DARK, 0, 0.09, 0))    // ricasso
-    g.add(part(0.19, 0.025, 0.030, HANDLE, 0, 0.055, 0))       // guard
-    g.add(part(0.035, 0.10, 0.030, 0x2b2b2b, 0, -0.02, 0))     // grip
-    g.add(part(0.050, 0.045, 0.040, HANDLE, 0, -0.085, 0))     // pommel
-  } else if (key === 'pickaxe') {
+  if (key === 'pickaxe') {
     g.add(part(0.030, 0.44, 0.030, HANDLE, 0, 0.06, 0))        // shaft
     g.add(part(0.30, 0.045, 0.045, STEEL, 0, 0.27, 0, 0, 0, 0.42))
     g.add(part(0.030, 0.07, 0.050, HANDLE, 0, 0.23, 0))
@@ -137,4 +131,4 @@ export class HandView {
   }
 }
 
-export { TOOLS, TOOL_SWORD, BLOCKS }
+export { TOOLS, BLOCKS }

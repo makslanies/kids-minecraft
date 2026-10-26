@@ -13,16 +13,15 @@ import { WebSocketServer } from 'ws'
 import {
   SERVER_PORT, DEFAULT_SEED, INTEREST_RADIUS, SAVE_INTERVAL_MS, MAX_PAYLOAD,
   HELLO_TIMEOUT_MS, TICK_HZ, SNAPSHOT_HZ, INPUT_HZ, CHUNK_SIZE, MAX_PLAYERS,
-  WORLD_X, WORLD_Y, WORLD_Z, PLAYER_MAX_HP,
+  WORLD_X, WORLD_Y, WORLD_Z,
 } from '../shared/constants.js'
-import { BLOCKS } from '../shared/blocks.js'
-import { MOB_BY_ID, MOB_COUNT, PLAYER_KNOCKBACK } from '../shared/mobs.js'
-import { toolReach, toolDamage, toolCooldown, isTool } from '../shared/items.js'
+import { B, BLOCKS } from '../shared/blocks.js'
 import { C2S, ERR, tryDecode, serverMsg } from '../shared/protocol.js'
 import { AuthoritativeWorld } from './world.js'
 import { PlayerRegistry } from './players.js'
 import { Persistence } from './persistence.js'
 import { MobRegistry } from './mobs.js'
+import { CityState } from './city.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
@@ -46,11 +45,10 @@ function makeLogger(quiet) {
 
 const publicPlayer = (p) => ({
   id: p.id, name: p.name, color: p.color, x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch,
-  hp: p.hp,
 })
 
 const publicMob = (m) => ({
-  id: m.id, kind: m.kind, x: m.pos.x, y: m.pos.y, z: m.pos.z, yaw: m.yaw, hp: m.hp, moving: m.moving,
+  id: m.id, kind: m.kind, x: m.pos.x, y: m.pos.y, z: m.pos.z, yaw: m.yaw, moving: m.moving,
 })
 
 export function startServer(options = {}) {
@@ -63,8 +61,12 @@ export function startServer(options = {}) {
   const log = options.log ?? makeLogger(options.quiet)
 
   const world = new AuthoritativeWorld({ seed })
-  const persistence = new Persistence({ world, dataDir, intervalMs: saveIntervalMs, log })
+  const city = new CityState({ world })
+  const persistence = new Persistence({ world, city, dataDir, intervalMs: saveIntervalMs, log })
   persistence.load()
+  // the letter cube may have been lost in a crash; put back the one the mission needs
+  const letterHunt = options.letterHunt ?? true
+  if (letterHunt) city.ensureCube()
   const players = new PlayerRegistry({ world, interestRadius, log })
   const mobs = new MobRegistry({ world, log })
 
@@ -112,16 +114,18 @@ export function startServer(options = {}) {
       seed: world.seed,
       world: { x: WORLD_X, y: WORLD_Y, z: WORLD_Z, chunk: CHUNK_SIZE },
       players: players.all().map(publicPlayer),
+      scores: scoreboard(),
       mobs: mobs.visibleFrom(me.x, me.z, players.interestRadius * 2).map(publicMob),
       edits: world.editList(),
+      city: city.status(),
       palette: BLOCKS.map((b) => ({ id: b.id, name: b.name })),
       rates: { input: INPUT_HZ, snapshot: SNAPSHOT_HZ, interestRadius: players.interestRadius },
-      maxHp: PLAYER_MAX_HP,
       serverTime: Date.now(),
     }))
 
     // Others dropped our entity when we disconnected, so always re-announce.
     players.broadcastAll(serverMsg.playerJoin(publicPlayer(me)), me.id)
+    players.broadcastAll(serverMsg.scores({ scores: scoreboard() }))
     log(`join  #${me.id} ${me.name} (${players.size} online${result.resumed ? ', resumed' : ''})`)
   }
 
@@ -151,7 +155,6 @@ export function startServer(options = {}) {
   function handleBlockEdit(socket, msg) {
     const me = players.forSocket(socket)
     if (!me) return fail(socket, ERR.NOT_HELLOED)
-    if (me.hp <= 0) return fail(socket, ERR.DEAD)
 
     const now = Date.now()
     if (!players.editAllowed(me, now)) return fail(socket, ERR.RATE_LIMITED)
@@ -179,72 +182,52 @@ export function startServer(options = {}) {
     players.broadcastAll(serverMsg.blockChanged({
       x: msg.x, y: msg.y, z: msg.z, block: res.block, by: me.id, seq: msg.seq,
     }))
+
+    if (target === B.LETTER) {
+      const found = city.letterBroken(msg.x, msg.y, msg.z)
+      if (found) {
+        me.score += found.points
+        broadcastCubeChanges(found.changes)
+        players.broadcastAll(serverMsg.city({
+          error: null,
+          newlyCompleted: found.newlyCompleted,
+          reward: { letter: found.letter, points: found.points, by: me.name },
+          ...city.status(),
+        }))
+        players.broadcastAll(serverMsg.scores({ scores: scoreboard() }))
+        log(`letter ${found.letter} broken by ${me.name}, +${found.points}`)
+      }
+    }
+  }
+
+  /** Everyone's points, for the table every player sees. */
+  function scoreboard() {
+    return players.all().map((p) => ({ id: p.id, name: p.name, color: p.color, score: p.score }))
+  }
+
+  /** Tell everyone about blocks the server placed or removed by itself. */
+  function broadcastCubeChanges(changes) {
+    for (const c of changes) {
+      players.broadcastAll(serverMsg.blockChanged({ x: c.x, y: c.y, z: c.z, block: c.block, by: 0, seq: 0 }))
+    }
   }
 
   /**
-   * Combat. The client says "I swung at this target with this tool"; the server
-   * decides whether that is plausible (alive, off cooldown, in reach) and owns
-   * every consequence: damage, knockback, death, respawn.
+   * "Проверить город". Every player gets the answer, because the city and its
+   * missions are shared. A quick double press is ignored.
    */
-  function handleAttack(socket, msg) {
+  function handleCheck(socket) {
     const me = players.forSocket(socket)
     if (!me) return fail(socket, ERR.NOT_HELLOED)
 
     const now = Date.now()
-    const tool = isTool(msg.tool) ? msg.tool : 0
-    const gate = players.canAttack(me, toolCooldown(tool), now)
-    if (!gate.ok) return fail(socket, gate.code)
-    players.markAttack(me, now)
+    if (now - (me.lastCheckAt || 0) < 1000) return
+    me.lastCheckAt = now
 
-    const reach = toolReach(tool)
-    const damage = toolDamage(tool)
-    const from = { x: me.x, y: me.y + 1.6, z: me.z }
-    const [dx, dy, dz] = msg.dir
-    const dirLen = Math.hypot(dx, dy, dz) || 1
-    const dir = { x: dx / dirLen, y: dy / dirLen, z: dz / dirLen }
-
-    if (msg.target.startsWith('m')) {
-      const res = mobs.hitMob({ id: Number(msg.target.slice(1)), fromId: me.id, from, reach, damage, now, players })
-      if (!res.ok) return fail(socket, res.code)
-      players.broadcastAll(serverMsg.hurt({
-        target: `m${res.mob.id}`, kind: 'mob', amount: damage, from: me.id,
-        hp: res.killed ? 0 : res.mob.hp, killed: res.killed, dir,
-      }))
-      if (res.killed) {
-        players.broadcastAll(serverMsg.mobGone({ id: res.mob.id }))
-        log(`kill  ${me.name} killed a ${MOB_BY_ID.get(res.mob.kind).name}`)
-      }
-      return
-    }
-
-    const victimId = Number(msg.target.slice(1))
-    const victim = players.get(victimId)
-    if (!victim || victim.hp <= 0) return fail(socket, ERR.BAD_TARGET)
-
-    const hit = players.hurtPlayer(victim, damage, now)
-    // broadcast to the attacker too: you want to see the thing you hit flinch
-    players.broadcastAll(serverMsg.hurt({
-      target: `p${victimId}`, kind: 'player', amount: damage, from: me.id,
-      hp: hit.hp, killed: hit.killed, dir,
-    }))
-
-    if (!hit.killed) {
-      // knock the victim back: the server moves the authoritative body and the
-      // client is told, so the speed clamp never fights the push
-      const vdx = victim.x - me.x
-      const vdz = victim.z - me.z
-      const len = Math.hypot(vdx, vdz) || 1
-      victim.x += (vdx / len) * PLAYER_KNOCKBACK
-      victim.z += (vdz / len) * PLAYER_KNOCKBACK
-      players.send(victim, serverMsg.correction({
-        x: victim.x, y: victim.y, z: victim.z, yaw: victim.yaw, pitch: victim.pitch,
-      }))
-      return
-    }
-
-    // death: the body stays where it fell; tickVitals respawns it
-    log(`kill  ${me.name} killed ${victim.name}`)
-    players.broadcastAll(serverMsg.died({ id: victimId, by: me.id }))
+    const res = city.check()
+    if (!res.ok) return send(socket, serverMsg.city({ error: res.error, ...res.status }))
+    players.broadcastAll(serverMsg.city({ error: null, newlyCompleted: res.newlyCompleted, ...res.status }))
+    if (res.newlyCompleted.length) log(`mission ${res.newlyCompleted.join(', ')} completed by ${me.name}`)
   }
 
   function onMessage(socket, raw) {
@@ -263,7 +246,7 @@ export function startServer(options = {}) {
       case C2S.HELLO: return handleHello(socket, msg)
       case C2S.INPUT: return handleInput(socket, msg)
       case C2S.BLOCK_EDIT: return handleBlockEdit(socket, msg)
-      case C2S.ATTACK: return handleAttack(socket, msg)
+      case C2S.CHECK: return handleCheck(socket)
       case C2S.PING: return send(socket, serverMsg.pong({ t: msg.t, serverTime: Date.now() }))
       default: return fail(socket, ERR.BAD_MESSAGE)
     }
@@ -291,6 +274,7 @@ export function startServer(options = {}) {
       if (!me) return
       players.remove(me)
       players.broadcastAll(serverMsg.playerLeave({ id: me.id }))
+      players.broadcastAll(serverMsg.scores({ scores: scoreboard() }))
       log(`leave #${me.id} ${me.name} (${players.size} online)`)
     })
     socket.on('error', () => { /* close handler does the cleanup */ })
@@ -307,22 +291,14 @@ export function startServer(options = {}) {
     const dt = Math.min(Math.max((now - lastTick) / 1000, 0), 0.25)
     lastTick = now
 
-    mobs.update(dt, players, now)
-    const { respawned } = players.tickVitals(now)
-    for (const p of respawned) {
-      // the respawning player MUST get this too, or their client stays on the
-      // death screen forever
-      players.send(p, serverMsg.respawned({ id: p.id, hp: p.hp }))
-      players.broadcastAll(serverMsg.respawned({ id: p.id, hp: p.hp }), p.id)
-      players.send(p, serverMsg.correction({ x: p.x, y: p.y, z: p.z, yaw: 0, pitch: 0 }))
-    }
+    mobs.update(dt, now)
     players.sweepRecent(now)
 
     if (now - lastSnapshot < snapshotEvery) return
     lastSnapshot = now
     for (const me of players.all()) {
       const list = players.visibleFrom(me).map((o) => ({
-        id: o.id, x: o.x, y: o.y, z: o.z, yaw: o.yaw, pitch: o.pitch, hp: o.hp,
+        id: o.id, x: o.x, y: o.y, z: o.z, yaw: o.yaw, pitch: o.pitch,
       }))
       const mobList = mobs.visibleFrom(me.x, me.z, players.interestRadius * 2).map(publicMob)
       players.send(me, serverMsg.snapshot({ t: now, players: list, mobs: mobList }))
@@ -371,7 +347,7 @@ export function startServer(options = {}) {
   }
 
   return {
-    world, players, mobs, persistence, wss, httpServer, ready, close, log,
+    world, players, mobs, city, persistence, wss, httpServer, ready, close, log,
     get port() {
       const addr = httpServer.address()
       return typeof addr === 'object' && addr ? addr.port : port

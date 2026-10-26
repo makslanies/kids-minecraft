@@ -2,7 +2,6 @@
 
 import { BLOCKS, ATLAS_COLS, tileFor } from '../../shared/blocks.js'
 import { HOTBAR, TOOL_BY_ID, toolSpeedOn, FAMILY } from '../../shared/items.js'
-import { PLAYER_MAX_HP } from '../../shared/constants.js'
 
 const el = (tag, className, html) => {
   const node = document.createElement(tag)
@@ -88,30 +87,6 @@ const TOOL_ICONS = {
     ctx.lineTo(42, 8)
     ctx.stroke()
   },
-  sword: (ctx) => {
-    ctx.strokeStyle = STEEL
-    ctx.lineWidth = 8
-    ctx.beginPath()
-    ctx.moveTo(12, 52)
-    ctx.lineTo(46, 16)
-    ctx.stroke()
-    ctx.strokeStyle = STEEL_DARK
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(14, 49)
-    ctx.lineTo(44, 17)
-    ctx.stroke()
-    ctx.strokeStyle = WOOD
-    ctx.lineWidth = 6
-    ctx.beginPath()
-    ctx.moveTo(8, 40)
-    ctx.lineTo(20, 56)
-    ctx.stroke()
-    ctx.fillStyle = WOOD_DARK
-    ctx.beginPath()
-    ctx.arc(7, 57, 5, 0, Math.PI * 2)
-    ctx.fill()
-  },
 }
 
 function toolIcon(name) {
@@ -140,16 +115,6 @@ export class Hud {
     this.crosshair.id = 'crosshair'
     ui.appendChild(this.crosshair)
 
-    // --- roster ------------------------------------------------------------
-    this.roster = el('div', 'panel')
-    this.roster.id = 'roster'
-    ui.appendChild(this.roster)
-
-    // --- stats -------------------------------------------------------------
-    this.stats = el('div', 'panel')
-    this.stats.id = 'stats'
-    ui.appendChild(this.stats)
-
     // --- hotbar ------------------------------------------------------------
     this.hotbar = el('div')
     this.hotbar.id = 'hotbar'
@@ -171,26 +136,37 @@ export class Hud {
       return slot
     })
 
-    // --- health / combat ---------------------------------------------------
-    this.health = el('div')
-    this.health.id = 'health'
-    this.health.innerHTML = `<div class="hp-bar"><div class="hp-fill"></div></div><div class="hp-text"></div>`
-    ui.appendChild(this.health)
-    this.hpFill = this.health.querySelector('.hp-fill')
-    this.hpText = this.health.querySelector('.hp-text')
-
-    this.hurtFlash = el('div')
-    this.hurtFlash.id = 'hurt-flash'
-    ui.appendChild(this.hurtFlash)
-
+    // --- break swing feedback ----------------------------------------------
     this.swingBar = el('div')
     this.swingBar.id = 'swing'
     ui.appendChild(this.swingBar)
 
-    this.deathOverlay = el('div', 'hidden')
-    this.deathOverlay.id = 'death'
-    this.deathOverlay.innerHTML = '<div class="death-card"><h2>You died</h2><p class="respawn">respawning…</p></div>'
-    root.appendChild(this.deathOverlay)
+    // --- points of every player, top right ---------------------------------
+    this.score = el('div', 'panel')
+    this.score.id = 'score'
+    ui.appendChild(this.score)
+
+
+    // --- mission sheet: a curtain that slides up from the bottom edge -----
+    this.sheet = el('div')
+    this.sheet.id = 'sheet'
+    this.sheet.innerHTML = `
+      <div class="grip"></div>
+      <h2></h2>
+      <p></p>
+      <button type="button" class="primary">Понятно!</button>`
+    this.sheetTitle = this.sheet.querySelector('h2')
+    this.sheetHint = this.sheet.querySelector('p')
+    this.sheet.querySelector('button').addEventListener('click', () => this.hideSheet())
+    ui.appendChild(this.sheet)
+    this.shownMissionId = null
+    // swipe the grip down to close, like a real curtain
+    let swipeFrom = null
+    this.sheet.querySelector('.grip').addEventListener('pointerdown', (e) => { swipeFrom = e.clientY })
+    window.addEventListener('pointerup', (e) => {
+      if (swipeFrom !== null && e.clientY - swipeFrom > 40) this.hideSheet()
+      swipeFrom = null
+    })
 
     this.toastEl = el('div')
     this.toastEl.id = 'toast'
@@ -209,23 +185,28 @@ export class Hud {
     this.overlay.id = 'overlay'
     this.overlay.innerHTML = `
       <div class="card">
-        <h1>Voxel Sandbox</h1>
-        <p class="sub">Authoritative node server &middot; three.js client &middot; up to 8 players</p>
+        <h1>Мой безопасный город</h1>
+        <p class="sub">Строим вместе, до 8 игроков</p>
         <div class="field">
-          <input id="name-input" maxlength="16" placeholder="Your name" autocomplete="off" />
-          <button class="primary" id="join-btn" disabled>Connecting&hellip;</button>
+          <input id="name-input" maxlength="16" placeholder="Твоё имя" autocomplete="off" />
+          <button class="primary" id="join-btn" disabled>Подключение…</button>
         </div>
         <div class="actions" id="overlay-status"></div>
         <div class="keys">
           <table>
-            <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Move</td></tr>
-            <tr><td><kbd>Space</kbd></td><td>Jump / swim up</td></tr>
-            <tr><td><kbd>Shift</kbd></td><td>Sprint</td></tr>
-            <tr><td>Left click</td><td>Hit a mob or player, else break a block</td></tr>
-            <tr><td>Right click</td><td>Place a block</td></tr>
-            <tr><td><kbd>1</kbd>&ndash;<kbd>8</kbd> / wheel</td><td>Select tool or block</td></tr>
-            <tr><td><kbd>Esc</kbd></td><td>Release mouse</td></tr>
+            <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Ходить</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>Прыжок</td></tr>
+            <tr><td><kbd>Shift</kbd></td><td>Бежать</td></tr>
+            <tr><td>Левая кнопка</td><td>Сломать блок</td></tr>
+            <tr><td>Правая кнопка</td><td>Поставить блок</td></tr>
+            <tr><td><kbd>1</kbd>&ndash;<kbd>8</kbd> / wheel</td><td>Выбрать инструмент или блок</td></tr>
+            <tr><td><kbd>C</kbd></td><td>Проверить город</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Выйти из игры</td></tr>
           </table>
+        </div>
+        <div class="keys touch-help">
+          <p>Слева пальцем — ходить. Справа — сломать, поставить и прыгнуть.</p>
+          <p>Чтобы посмотреть по сторонам, проведи пальцем по экрану. Проверка города — кнопка ✔.</p>
         </div>
       </div>`
     root.appendChild(this.overlay)
@@ -298,22 +279,20 @@ export class Hud {
     this.hint.style.display = text ? '' : 'none'
   }
 
-  /** Red vignette when the local player is hit. */
-  flashHurt(strength = 1) {
-    this.hurtFlash.style.opacity = String(Math.min(0.55, 0.28 * strength))
-    clearTimeout(this._hurtTimer)
-    this._hurtTimer = setTimeout(() => { this.hurtFlash.style.opacity = '0' }, 180)
+  /**
+   * Slide the curtain up with the current mission. Shown once per mission, so
+   * closing it stays closed until the next mission starts.
+   */
+  offerMission(mission) {
+    if (!mission || mission.id === this.shownMissionId) return
+    this.shownMissionId = mission.id
+    this.sheetTitle.textContent = mission.title
+    this.sheetHint.textContent = mission.hint
+    this.sheet.classList.add('open')
   }
 
-  setHealth(hp, maxHp = PLAYER_MAX_HP) {
-    const pct = Math.max(0, Math.min(1, hp / maxHp))
-    this.hpFill.style.width = `${pct * 100}%`
-    this.hpFill.style.background = pct > 0.5 ? '#7ee787' : pct > 0.25 ? '#e3b341' : '#f85149'
-    this.hpText.textContent = `${Math.ceil(hp)} / ${maxHp}`
-  }
-
-  setDead(dead) {
-    this.deathOverlay.classList.toggle('hidden', !dead)
+  hideSheet() {
+    this.sheet.classList.remove('open')
   }
 
   setSwing(progress) {
@@ -357,30 +336,20 @@ export class Hud {
 
   setJoinEnabled(enabled, label) {
     this.joinBtn.disabled = !enabled
-    this.joinBtn.textContent = label || (enabled ? 'Join' : 'Connecting…')
+    this.joinBtn.textContent = label || (enabled ? 'Играть' : 'Подключение…')
   }
 
-  updateRoster(selfId, players) {
-    const rows = players
+  /** Points table: everyone's name and score, best first. */
+  setScores(list, selfId) {
+    const rows = list
       .slice()
-      .sort((a, b) => a.id - b.id)
+      .sort((a, b) => b.score - a.score || a.id - b.id)
       .map((p) => {
         const me = p.id === selfId ? ' me' : ''
-        return `<div class="row${me}"><span class="dot" style="background:${p.color}"></span>${escapeHtml(p.name)}</div>`
+        return `<div class="row${me}"><span class="dot" style="background:${p.color}"></span>${escapeHtml(p.name)}<span class="pts">${p.score}</span></div>`
       })
       .join('')
-    this.roster.innerHTML = `<h3>Players · ${players.length}</h3>${rows || '<div class="row">alone</div>'}`
-  }
-
-  updateStats({ state, rtt, ping, count, mobs, tris, pos }) {
-    const ok = state === 'connected'
-    this.stats.innerHTML = `
-      <div><span class="k">server</span> <span class="${ok ? 'dot-ok' : 'dot-bad'}">${state}</span></div>
-      <div><span class="k">rtt</span> <span class="v">${rtt === null ? '—' : `${rtt} ms`}</span></div>
-      <div><span class="k">online</span> <span class="v">${count}</span></div>
-      <div><span class="k">mobs</span> <span class="v">${mobs ?? 0}</span></div>
-      <div><span class="k">tris</span> <span class="v">${tris.toLocaleString()}</span></div>
-      <div><span class="k">pos</span> <span class="v">${pos}</span></div>`
+    this.score.innerHTML = `<h3>⭐ Очки</h3>${rows || '<div class="row">пока никто не нашёл букву</div>'}`
   }
 }
 

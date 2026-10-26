@@ -1,12 +1,12 @@
-// Server-authoritative mobs.
+// Server-authoritative animals.
 //
 // They are simulated here, in the same tick loop that broadcasts snapshots,
 // using the same shared/collision.js the client uses. A mob therefore can never
 // end up somewhere the client thinks is solid, and every client sees the same
-// animal in the same place.
+// animal in the same place. Animals only wander: nothing can hurt them.
 
 import {
-  MOB_BY_ID, MOB_POPULATION, MOB_COUNT, KNOCKBACK, KNOCKBACK_Y,
+  MOB_BY_ID, MOB_POPULATION, MOB_COUNT,
 } from '../shared/mobs.js'
 import { stepMovement, surfaceY, fits } from '../shared/collision.js'
 import { WORLD_X, WORLD_Y, WORLD_Z, WATER_LEVEL } from '../shared/constants.js'
@@ -70,47 +70,16 @@ export class MobRegistry {
         pos: { x, y, z },
         vel: { x: 0, y: 0, z: 0 },
         yaw: Math.random() * Math.PI * 2,
-        hp: def.hp,
         state: 'idle',
         timer: def.wanderIdle[0] + Math.random() * (def.wanderIdle[1] - def.wanderIdle[0]),
         dirX: 0,
         dirZ: 0,
-        flashUntil: 0,
-        deadUntil: 0,
         moving: false,
       }
       this.mobs.set(mob.id, mob)
       return mob
     }
     return null
-  }
-
-  /** @returns {object|null} the mob that was hit */
-  damage(mob, amount, players, fromId, now) {
-    if (!mob || now < mob.flashUntil - 1000) return null
-    const def = MOB_BY_ID.get(mob.kind)
-    mob.hp -= amount
-    mob.flashUntil = now + 180
-    if (mob.hp <= 0) {
-      this.kill(mob, now)
-      return mob
-    }
-    // flee from the attacker for a moment
-    const away = this._awayFrom(mob, players, fromId)
-    mob.state = 'flee'
-    mob.dirX = away.x
-    mob.dirZ = away.z
-    mob.timer = 1.6 + Math.random() * 1.4
-    return mob
-  }
-
-  _awayFrom(mob, players, fromId) {
-    const attacker = players?.get(fromId)
-    if (!attacker) return { x: Math.cos(mob.yaw), z: Math.sin(mob.yaw) }
-    const dx = mob.pos.x - attacker.x
-    const dz = mob.pos.z - attacker.z
-    const len = Math.hypot(dx, dz) || 1
-    return { x: dx / len, z: dz / len }
   }
 
   kill(mob, now) {
@@ -120,18 +89,11 @@ export class MobRegistry {
     this.pendingRespawns.push({ kind: mob.kind, at: now + lo + Math.random() * (hi - lo) })
   }
 
-  knockback(mob, dirX, dirZ) {
-    mob.vel.x += dirX * KNOCKBACK
-    mob.vel.z += dirZ * KNOCKBACK
-    mob.vel.y = Math.max(mob.vel.y, KNOCKBACK_Y)
-  }
-
   /**
    * One AI step. Called at TICK_HZ with a fixed dt so the result does not
    * depend on how often the loop happens to fire.
    */
-  update(dt, players, now) {
-
+  update(dt, now) {
     for (let i = this.pendingRespawns.length - 1; i >= 0; i--) {
       if (now >= this.pendingRespawns[i].at) {
         this.spawn(this.pendingRespawns[i].kind)
@@ -144,7 +106,7 @@ export class MobRegistry {
       mob.timer -= dt
 
       if (mob.timer <= 0) {
-        if (mob.state === 'flee') {
+        if (mob.state === 'walk') {
           mob.state = 'idle'
           mob.timer = def.wanderIdle[0] + Math.random() * (def.wanderIdle[1] - def.wanderIdle[0])
         } else {
@@ -157,17 +119,9 @@ export class MobRegistry {
         }
       }
 
-      // sheep-like: do not walk off a big drop
-      if (mob.state === 'walk' && this._cliffAhead(mob)) {
-        mob.dirX = -mob.dirX
-        mob.dirZ = -mob.dirZ
-        mob.timer = Math.max(mob.timer, 0.4)
-      }
-
-      const speed = mob.state === 'flee' ? def.fleeSpeed : def.speed
-      const walking = mob.state === 'walk' || mob.state === 'flee'
-      const targetVx = walking ? mob.dirX * speed : 0
-      const targetVz = walking ? mob.dirZ * speed : 0
+      const walking = mob.state === 'walk'
+      const targetVx = walking ? mob.dirX * def.speed : 0
+      const targetVz = walking ? mob.dirZ * def.speed : 0
       const k = Math.min(1, dt * 8)
       mob.vel.x += (targetVx - mob.vel.x) * k
       mob.vel.z += (targetVz - mob.vel.z) * k
@@ -175,11 +129,12 @@ export class MobRegistry {
       const before = { x: mob.pos.x, z: mob.pos.z }
       const res = stepMovement(this.world, mob.pos, mob.vel, dt, def.halfW, def.height, GRAVITY)
 
-      // a wall in front means turn around, do not grind against it
-      if ((res.hitX && Math.abs(mob.vel.x) < 0.01) || (res.hitZ && Math.abs(mob.vel.z) < 0.01)) {
-        mob.dirX = -mob.dirX
-        mob.dirZ = -mob.dirZ
-        mob.timer = Math.max(mob.timer, 0.5)
+      // a wall in front, or a drop just ahead (sheep-like: do not walk off a
+      // big one): pick a new heading, once per tick. Flipping the heading in two
+      // separate checks let them cancel each other out and pinned the animal.
+      const blocked = res.hitX || res.hitZ
+      if (mob.state === 'walk' && (blocked || this._cliffAhead(mob))) {
+        this._turn(mob, def)
       }
 
       const moved = Math.hypot(mob.pos.x - before.x, mob.pos.z - before.z)
@@ -196,6 +151,18 @@ export class MobRegistry {
       // fell out of the world
       if (mob.pos.y < -8) this.kill(mob, now)
     }
+  }
+
+  /**
+   * Stop and pause. The next walk picks a fresh heading. Turning straight into
+   * a new heading would loop forever in a corner where every direction is
+   * blocked, so the animal first stands still for a moment.
+   */
+  _turn(mob, def) {
+    mob.state = 'idle'
+    mob.timer = def.wanderIdle[0] + Math.random() * (def.wanderIdle[1] - def.wanderIdle[0])
+    mob.vel.x = 0
+    mob.vel.z = 0
   }
 
   /** Is there a drop of more than `steps` blocks just ahead? */
@@ -219,53 +186,6 @@ export class MobRegistry {
       out.push(m)
     }
     out.sort((a, b) => a.id - b.id)
-    return out
-  }
-
-  /**
-   * Resolve a swing against a mob. Player-vs-player damage is applied by the
-   * caller in server/index.js, because only it knows how to push a
-   * client-authoritative body around.
-   *
-   * @returns {{ok:true,mob:object,killed:boolean}|{ok:false,code:string}}
-   */
-  hitMob({ id, fromId, from, reach, damage, now, players }) {
-    const mob = this.mobs.get(id)
-    if (!mob) return { ok: false, code: 'bad_target' }
-    if (mob.hp <= 0) return { ok: false, code: 'bad_target' }
-    if (now < mob.flashUntil) return { ok: false, code: 'too_fast' }
-
-    const dx = mob.pos.x - from.x
-    const dy = mob.pos.y + 0.45 - from.y
-    const dz = mob.pos.z - from.z
-    if (Math.hypot(dx, dy, dz) > reach) return { ok: false, code: 'bad_target' }
-
-    mob.hp -= damage
-    mob.flashUntil = now + 180
-    if (mob.hp <= 0) {
-      this.kill(mob, now)
-      return { ok: true, mob, killed: true }
-    }
-
-    const away = this._awayFrom(mob, players, fromId)
-    mob.state = 'flee'
-    mob.dirX = away.x
-    mob.dirZ = away.z
-    mob.timer = 1.6 + Math.random() * 1.4
-    const len = Math.hypot(dx, dz) || 1
-    this.knockback(mob, dx / len, dz / len)
-    return { ok: true, mob, killed: false }
-  }
-
-  /** Mobs inside a box around a player, for "did my swing land" feedback. */
-  inReach(from, reach) {
-    const out = []
-    for (const m of this.mobs.values()) {
-      const dx = m.pos.x - from.x
-      const dy = m.pos.y + 0.45 - from.y
-      const dz = m.pos.z - from.z
-      if (Math.hypot(dx, dy, dz) <= reach) out.push(m)
-    }
     return out
   }
 }

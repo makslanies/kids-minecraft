@@ -2,7 +2,7 @@
 // at (serverTime - INTERP_DELAY_MS) so movement stays smooth under jitter.
 
 import * as THREE from 'three'
-import { INTERP_DELAY_MS, EXTRAPOLATION_CAP_MS, PLAYER_MAX_HP } from '../../shared/constants.js'
+import { INTERP_DELAY_MS, EXTRAPOLATION_CAP_MS } from '../../shared/constants.js'
 
 const MAX_SAMPLES = 24
 
@@ -81,8 +81,6 @@ function buildBody(color) {
   return group
 }
 
-const HURT_COLOR = new THREE.Color('#ff5a4a')
-
 function lerpAngle(a, b, f) {
   let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI
   if (d < -Math.PI) d += Math.PI * 2
@@ -101,11 +99,11 @@ export class RemotePlayers {
 
   list() {
     return [...this.entities.values()].map((e) => ({
-      id: e.id, name: e.name, color: e.color, x: e.x, y: e.y, z: e.z, hp: e.hp,
+      id: e.id, name: e.name, color: e.color, x: e.x, y: e.y, z: e.z,
     }))
   }
 
-  add({ id, name, color, x = 0, y = 0, z = 0, yaw = 0, pitch = 0, hp = PLAYER_MAX_HP }) {
+  add({ id, name, color, x = 0, y = 0, z = 0, yaw = 0, pitch = 0 }) {
     if (this.entities.has(id)) {
       this.rename(id, name, color)
       return this.entities.get(id)
@@ -116,20 +114,9 @@ export class RemotePlayers {
     tag.position.y = 2.05
     group.add(tag)
     this.scene.add(group)
-    const entity = { id, name, color, group, tag, buffer: [], x, y, z, yaw, pitch, hp, flash: 0 }
+    const entity = { id, name, color, group, tag, buffer: [], x, y, z, yaw, pitch }
     this.entities.set(id, entity)
     return entity
-  }
-
-  /** Red tint for a moment after being hit. */
-  flash(id) {
-    const e = this.entities.get(id)
-    if (e) e.flash = 0.24
-  }
-
-  setHp(id, hp) {
-    const e = this.entities.get(id)
-    if (e) e.hp = hp
   }
 
   rename(id, name, color) {
@@ -168,7 +155,6 @@ export class RemotePlayers {
     for (const p of list) {
       if (!this.entities.has(p.id)) this.add(p)
       const e = this.entities.get(p.id)
-      if (typeof p.hp === 'number') e.hp = p.hp
       e.buffer.push({ t: serverTime, x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch })
       if (e.buffer.length > MAX_SAMPLES) e.buffer.shift()
     }
@@ -210,20 +196,9 @@ export class RemotePlayers {
     return last
   }
 
-  update(serverTime, dt = 0) {
+  update(serverTime) {
     const t = serverTime - INTERP_DELAY_MS
     for (const e of this.entities.values()) {
-      if (e.flash > 0) {
-        e.flash = Math.max(0, e.flash - dt)
-        const on = e.flash > 0
-        e.group.traverse((o) => {
-          if (!o.isMesh || !o.material?.color) return
-          if (!o.userData.base) o.userData.base = o.material.color.clone()
-          o.material.color.copy(on
-            ? o.userData.base.clone().lerp(HURT_COLOR, 0.6)
-            : o.userData.base)
-        })
-      }
       const s = this.sampleAt(e, t)
       if (!s) continue
       e.x = s.x

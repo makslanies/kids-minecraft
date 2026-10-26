@@ -78,6 +78,9 @@ export class PlayerController {
     this.onGround = false
     this.locked = false
     this.keys = new Set()
+    /** on-screen stick (touch): x right, y forward, each -1..1 */
+    this.touchMove = { x: 0, y: 0 }
+    this.touchJump = false
     this.sprinting = false
     this.dead = false
     /** progress 0..1 of the arm swing, driven by the HUD/controller each frame */
@@ -109,9 +112,14 @@ export class PlayerController {
 
   onMouseMove(ev) {
     if (!this.locked) return
+    this.look(ev.movementX, ev.movementY)
+  }
+
+  /** Turn the view by a pixel delta (mouse while locked, or a touch drag). */
+  look(dx, dy) {
     const s = 0.0022
-    this.yaw -= ev.movementX * s
-    this.pitch -= ev.movementY * s
+    this.yaw -= dx * s
+    this.pitch -= dy * s
     const lim = Math.PI / 2 - 0.001
     this.pitch = Math.max(-lim, Math.min(lim, this.pitch))
     if (this.yaw > Math.PI) this.yaw -= Math.PI * 2
@@ -151,6 +159,9 @@ export class PlayerController {
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) fz -= 1
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) fx += 1
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) fx -= 1
+    fx = Math.max(-1, Math.min(1, fx + this.touchMove.x))
+    fz = Math.max(-1, Math.min(1, fz + this.touchMove.y))
+    const jump = this.keys.has('Space') || this.touchJump
 
     this._wish.set(0, 0, 0)
     if (fx || fz) {
@@ -169,8 +180,8 @@ export class PlayerController {
     // twice halves the jump (and doubles the fall speed) without looking wrong
     // enough to notice until you cannot clear a single block.
     if (water) {
-      if (this.keys.has('Space')) this.vel.y = Math.min(this.vel.y + 26 * dt, 3.4)
-    } else if (this.keys.has('Space') && this.onGround) {
+      if (jump) this.vel.y = Math.min(this.vel.y + 26 * dt, 3.4)
+    } else if (jump && this.onGround) {
       this.vel.y = JUMP_SPEED
       this.onGround = false
     }
@@ -206,34 +217,6 @@ export class PlayerController {
   pick(world, toolId) {
     this._dir.set(0, 0, -1).applyQuaternion(this.camera.quaternion)
     return raycastVoxel(world, this.camera.position, this._dir, toolReach(toolId))
-  }
-
-  /**
-   * What the crosshair is pointing at for combat purposes: the closest mob or
-   * player within reach and roughly in front of the camera.
-   * @param {Array<{target:string,x:number,y:number,z:number,aimY:number}>} targets
-   */
-  pickEntity(targets, toolId) {
-    const reach = toolReach(toolId)
-    this._dir.set(0, 0, -1).applyQuaternion(this.camera.quaternion)
-    const origin = this.camera.position
-    let best = null
-    let bestScore = Infinity
-    for (const t of targets) {
-      const dx = t.x - origin.x
-      const dy = (t.y + t.aimY) - origin.y
-      const dz = t.z - origin.z
-      const dist = Math.hypot(dx, dy, dz)
-      if (dist > reach || dist < 0.001) continue
-      const dot = (dx * this._dir.x + dy * this._dir.y + dz * this._dir.z) / dist
-      if (dot < 0.9) continue
-      const score = dist * (2 - dot)
-      if (score < bestScore) {
-        bestScore = score
-        best = t
-      }
-    }
-    return best
   }
 
   dispose() {

@@ -36,7 +36,7 @@ function writeToken(token) {
 }
 
 export class Connection {
-  constructor({ url = resolveServerUrl(), name = 'Player', onMessage, onStatus, onOpen, onClose } = {}) {
+  constructor({ url = resolveServerUrl(), name = 'Игрок', onMessage, onStatus, onOpen, onClose } = {}) {
     this.url = url
     this.name = name
     this.onMessage = onMessage || (() => {})
