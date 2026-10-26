@@ -9,7 +9,7 @@
     "client": "vite",
     "dev": "concurrently -n server,client -c cyan,magenta \"npm:server\" \"npm:client\"",
     "build": "vite build",
-    "test": "node --test test/unit.test.js test/mesher.test.js test/tools-and-mobs.test.js test/city.test.js test/integration.test.js"
+    "test": "node --test test/unit.test.js test/mesher.test.js test/tools-and-mobs.test.js test/city.test.js test/pwa.test.js test/integration.test.js"
   },
   "dependencies": {
     "three": "^0.186.1",

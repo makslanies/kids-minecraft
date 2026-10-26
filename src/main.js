@@ -42,7 +42,6 @@ const touch = isTouch
     canvas: dom,
     controller,
     onPlace: () => placeBlock(),
-    onCheck: () => checkCity(),
   })
   : null
 
@@ -92,13 +91,13 @@ const connection = new Connection({
     }
   },
   onOpen: () => {
-    // The name from ?name= already went out in the hello, so autoplay only
-    // needs to get out of the way — reconnecting here would loop forever.
     hud.setJoinEnabled(true, autoJoin ? 'В игре' : 'Играть')
     if (autoJoin) hud.setHint('Входим…')
   },
   onMessage: handleMessage,
 })
+// autoplay joins as soon as the socket opens; otherwise the name screen waits for "Играть"
+connection.helloOnOpen = autoJoin
 
 // ------------------------------------------------------------------ routing
 
@@ -184,11 +183,14 @@ function onCity(msg) {
 function join() {
   const name = (hud.nameInput.value || defaultName).trim().slice(0, 16) || defaultName
   connection.name = name
+  connection.helloOnOpen = true
   hud.showOverlay(false)
   hud.setHint('Подключение…')
   // hello carries the name and may only be sent once per socket, so a name
   // change needs a fresh connection (the resume token keeps the identity).
-  connection.reconnect()
+  if (connection.helloed) connection.reconnect()
+  else if (connection.connected) connection.hello()
+  else connection.connect()
 }
 
 hud.joinBtn.addEventListener('click', join)
@@ -230,12 +232,6 @@ function placeBlock() {
   reconciler.requestEdit(tx, ty, tz, block)
 }
 
-/** "Проверить город", from the C key or the check button. */
-function checkCity() {
-  if (!joined) return
-  connection.send(C2S.CHECK, {})
-}
-
 // A mouse still locks the view even when the on-screen controls are showing.
 const hasMouse = matchMedia('(pointer: fine)').matches
 
@@ -252,10 +248,6 @@ dom.addEventListener('mousedown', (e) => {
 window.addEventListener('keydown', (e) => {
   if (!joined) return
   if (e.code === 'Escape') return
-  if (e.code === 'KeyC') {
-    checkCity()
-    return
-  }
 })
 
 controller.onLockChange = (locked) => {
@@ -382,3 +374,11 @@ worldRenderer.atlas.ready.then(() => {
   connection.connect()
   tick()
 })
+
+// Installable and offline-ready: the service worker is only used in the built
+// game, so a development server never serves stale files.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {
+    // no offline cache is fine; the game still runs over the network
+  })
+}

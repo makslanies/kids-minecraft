@@ -73,7 +73,7 @@ export class Hud {
     this.overlay.innerHTML = `
       <div class="card">
         <h1>Мой безопасный город</h1>
-        <p class="sub">Строим вместе, до 8 игроков</p>
+        <p class="sub">Развиваемся вместе, до 8 игроков</p>
         <div class="field">
           <input id="name-input" maxlength="16" placeholder="Твоё имя" autocomplete="off" />
           <button class="primary" id="join-btn" disabled>Подключение…</button>
@@ -86,14 +86,18 @@ export class Hud {
             <tr><td><kbd>Shift</kbd></td><td>Бежать</td></tr>
             <tr><td>Левая кнопка</td><td>Сломать блок</td></tr>
             <tr><td>Правая кнопка</td><td>Поставить блок</td></tr>
-            <tr><td><kbd>C</kbd></td><td>Проверить город</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Выйти из игры</td></tr>
           </table>
         </div>
         <div class="keys touch-help">
           <p>Стрелки слева внизу — ходить. Круг справа внизу — смотреть по сторонам.</p>
-          <p>Посередине — сломать, поставить и прыгнуть. Проверка города — кнопка вверху слева.</p>
+          <p>Посередине — сломать, поставить и прыгнуть.</p>
         </div>
+        <section class="parents">
+          <h2>Для родителей</h2>
+          <p>Ребёнок строит свой город: ставит маяки, сирены и датчики и ищет спрятанные золотые кубики с буквами русского алфавита. Каждая найденная буква приносит очки.</p>
+          <p>В игре нет боя, чата и чужих игроков. Животные не получают урона. Вход защищён паролем, и играть можно без регистрации.</p>
+        </section>
       </div>`
     root.appendChild(this.overlay)
 

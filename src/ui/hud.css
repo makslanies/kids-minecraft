@@ -88,43 +88,54 @@ html, body {
   z-index: 20;
   display: grid;
   place-items: center;
-  background: radial-gradient(circle at 50% 35%, rgba(32, 48, 68, 0.86), rgba(6, 9, 13, 0.96));
-  backdrop-filter: blur(3px);
+  padding: 16px;
+  overflow-y: auto;
+  font-family: 'Nunito', system-ui, sans-serif;
+  color: #1f2a1d;
+  background: linear-gradient(160deg, #9dca94 0%, #e8f3e4 55%, #fff6ec 100%);
 }
 #overlay.hidden { display: none; }
 .card {
   width: min(760px, 94vw);
-  background: rgba(15, 20, 27, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 16px;
+  background: #fff;
+  border: none;
+  border-radius: 24px;
   padding: 34px 40px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 18px 50px rgba(49, 132, 32, 0.22);
 }
-.card h1 { margin: 0 0 6px; font-size: 42px; letter-spacing: -0.01em; }
-.card p.sub { margin: 0 0 26px; color: #8b98a8; font-size: 20px; }
+.card h1 { margin: 0 0 6px; font-size: 40px; font-weight: 800; color: #318420; line-height: 1.2; }
+.card p.sub { margin: 0 0 26px; color: #5b6b57; font-size: 20px; font-weight: 600; }
+.parents { margin-top: 24px; border-top: 1px solid #e3eee0; padding-top: 16px; }
+.parents h2 { margin: 0 0 10px; font-size: 24px; font-weight: 800; color: #ea853a; }
+.parents p { margin: 0 0 10px; font-size: 18px; line-height: 1.5; color: #3c4a38; }
 .field { display: flex; gap: 12px; margin-bottom: 22px; }
 .field input {
   flex: 1;
-  background: #0d1117;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 9px;
-  color: #e6edf3;
+  background: #fff;
+  border: 2px solid #9dca94;
+  border-radius: 14px;
+  color: #1f2a1d;
   padding: 14px 16px;
-  font-size: 24px;
+  font: inherit;
+  font-size: 22px;
+  font-weight: 600;
   outline: none;
 }
-.field input:focus { border-color: #58a6ff; }
+.field input:focus { border-color: #318420; box-shadow: 0 0 0 4px rgba(49, 132, 32, 0.15); }
 button.primary {
-  background: #238636;
+  background: #ea853a;
   border: none;
   color: #fff;
-  font-weight: 700;
-  font-size: 26px;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 24px;
   padding: 14px 32px;
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
+  box-shadow: 0 6px 0 #c96a25;
 }
-button.primary:disabled { background: #30363d; color: #8b949e; cursor: default; }
+button.primary:active { transform: translateY(3px); box-shadow: 0 3px 0 #c96a25; }
+button.primary:disabled { background: #cfd8cc; color: #6b7a66; box-shadow: none; cursor: default; }
 button.ghost {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -135,15 +146,15 @@ button.ghost {
   cursor: pointer;
 }
 .actions { display: flex; gap: 10px; align-items: center; }
-.keys { margin-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.09); padding-top: 14px; }
-.keys table { width: 100%; border-collapse: collapse; font-size: 20px; color: #b6c0cc; }
+.keys { margin-top: 24px; border-top: 1px solid #e3eee0; padding-top: 14px; }
+.keys table { width: 100%; border-collapse: collapse; font-size: 19px; color: #3c4a38; }
 .keys td { padding: 6px 0; }
-.keys td:first-child { width: 230px; color: #e6edf3; }
+.keys td:first-child { width: 230px; color: #318420; font-weight: 700; }
 kbd {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #f2f8f0;
+  border: 1px solid #9dca94;
   border-bottom-width: 2px;
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 2px 9px;
   font-size: 17px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -289,21 +300,6 @@ kbd {
 .act.break { background: #d9463f; }
 .act.place { background: #1f6feb; }
 .act.jump { background: #2ea043; }
-#act-check {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  width: auto;
-  height: auto;
-  border-radius: 16px;
-  padding: 12px 22px;
-  flex-direction: row;
-  gap: 10px;
-  background: #8957e5;
-  pointer-events: auto;
-}
-#act-check .icon { font-size: 30px; }
-#act-check .label { font-size: 22px; }
 
 .touch-help { display: none; }
 body.touch .touch-help { display: block; }

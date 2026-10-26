@@ -44,7 +44,9 @@ export const TICK_HZ = 20
 export const INPUT_HZ = 20
 export const SNAPSHOT_HZ = 15
 export const INTEREST_RADIUS = 48
-export const HELLO_TIMEOUT_MS = 5_000
+// how long a socket may stay open before its hello; the name and rules screen
+// waits here, so this must be long enough to read it
+export const HELLO_TIMEOUT_MS = 10 * 60_000
 export const PING_INTERVAL_MS = 5_000
 export const MAX_BAD_MESSAGES = 3
 export const MAX_PAYLOAD = 16 * 1024

@@ -39,9 +39,8 @@ export class TouchControls {
    * @param {HTMLElement} opts.canvas  the game view, where drag-to-look happens
    * @param {object} opts.controller  PlayerController: touchMove, touchLook, touchJump, look()
    * @param {() => void} opts.onPlace  tap on the place button
-   * @param {() => void} opts.onCheck  tap on the check button
    */
-  constructor({ root, canvas, controller, onPlace, onCheck }) {
+  constructor({ root, canvas, controller, onPlace }) {
     this.controller = controller
     /** true while the break button is held down; main.js repeats the break */
     this.breaking = false
@@ -75,13 +74,9 @@ export class TouchControls {
     this.actions.append(this.breakBtn, this.jumpBtn)
     root.append(this.actions, this.placeBtn)
 
-    this.checkBtn = button('act-check', '✔', 'Проверить', 'check')
-    root.appendChild(this.checkBtn)
-
     this._bindHold(this.breakBtn, () => { this.breaking = true }, () => { this.breaking = false })
     this._bindHold(this.jumpBtn, () => { controller.touchJump = true }, () => { controller.touchJump = false })
     this.placeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); onPlace() })
-    this.checkBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); onCheck() })
 
     this._bindLook(canvas)
   }

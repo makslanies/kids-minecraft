@@ -51,6 +51,10 @@ export class Connection {
     this.reconnectTimer = null
     this.pingTimer = null
     this.state = 'idle'
+    /** send the hello as soon as the socket opens (after the first join, and for autoplay) */
+    this.helloOnOpen = false
+    /** the hello went out on the current socket */
+    this.helloed = false
   }
 
   get connected() {
@@ -65,14 +69,14 @@ export class Connection {
   connect() {
     if (this.ws) return
     this.setState(this.attempt === 0 ? 'connecting' : 'reconnecting')
+    this.helloed = false
     const ws = new WebSocket(this.url)
     ws._intentional = false
     this.ws = ws
 
     ws.onopen = () => {
       this.attempt = 0
-      const token = readToken()
-      this.send(C2S.HELLO, { name: this.name, resumeToken: token || undefined })
+      if (this.helloOnOpen) this.hello()
       this.setState('connected')
       this.startPing()
       this.onOpen()
@@ -107,6 +111,14 @@ export class Connection {
     }
 
     ws.onerror = () => { /* onclose always follows and drives the retry */ }
+  }
+
+  /** Introduce the player: name and resume token. Once per socket. */
+  hello() {
+    if (!this.connected || this.helloed) return
+    const token = readToken()
+    this.send(C2S.HELLO, { name: this.name, resumeToken: token || undefined })
+    this.helloed = true
   }
 
   /** Drop the current socket and open a fresh one (used when the name changes). */
