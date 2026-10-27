@@ -4,7 +4,7 @@
 
 https://github.com/makslanies/kids-minecraft
 
-<video src="assets/game-mc.mp4" controls width="100%"></video>
+<video src="assets/game-mc.mp4" poster="assets/game-mc-preview.jpg" controls width="100%"></video>
 
 [Смотреть видео](assets/game-mc.mp4)
 
