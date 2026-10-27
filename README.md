@@ -6,7 +6,7 @@ https://github.com/makslanies/kids-minecraft
 
 <video src="assets/game-mc.mp4" poster="assets/game-mc-preview.jpg" controls width="100%"></video>
 
-[Смотреть видео](assets/game-mc.mp4)
+[Смотреть видео](assets/game-mc.mp4) · [видео в issue](https://github.com/makslanies/kids-minecraft/issues/1)
 
 ## Для родителей
 
